@@ -4,6 +4,12 @@ Sentinel ML Service — FastAPI application.
 Entry point for the ML inference service. Uses lifespan events to
 load all ML models at startup and release them at shutdown.
 The model registry is stored on app.state for access via dependency injection.
+
+YOLO26 Architecture:
+- All YOLO models use `from ultralytics import YOLO`
+- NMS-free by default (one-to-one head) — predictions without post-processing
+- Pretrained models (detect, pose) auto-download from Ultralytics hub
+- Custom models (face, fire) must be fine-tuned and placed in ml/weights/
 """
 
 import logging
@@ -38,44 +44,26 @@ def _load_models() -> dict:
     registry = {}
     device = settings.DEVICE
 
-    # --- Phase 2: Face detector (YOLOv8-face) ---
-    model_name = "face_detector"
-    registry[model_name] = {
-        "model": None,
-        "loaded": False,
-        "device": device,
-        "variant": settings.YOLO_FACE_MODEL,
-    }
-    # Actual loading will be added in Phase 2:
-    # try:
-    #     start = time.perf_counter()
-    #     from ml.models.face_detector import FaceDetector
-    #     model = FaceDetector()
-    #     elapsed = (time.perf_counter() - start) * 1000
-    #     registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
-    #     logger.info(f"Loaded {model_name} ({settings.YOLO_FACE_MODEL}) on {device} in {elapsed:.0f}ms")
-    # except Exception as e:
-    #     logger.warning(f"Failed to load {model_name}: {e}")
-
-    # --- Phase 2: Face recognizer (ArcFace) ---
-    model_name = "face_recognizer"
-    registry[model_name] = {
-        "model": None,
-        "loaded": False,
-        "device": device,
-        "variant": settings.ARCFACE_MODEL,
-    }
-
-    # --- Phase 3: Person detector (YOLOv8) ---
+    # --- YOLO26 detection (COCO pretrained, auto-downloads) ---
     model_name = "person_detector"
     registry[model_name] = {
         "model": None,
         "loaded": False,
         "device": device,
-        "variant": settings.YOLO_PERSON_MODEL,
+        "variant": settings.YOLO_DETECT_MODEL,
     }
+    # Actual loading (Phase 3):
+    # try:
+    #     start = time.perf_counter()
+    #     from ultralytics import YOLO
+    #     model = YOLO(settings.YOLO_DETECT_MODEL)
+    #     elapsed = (time.perf_counter() - start) * 1000
+    #     registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+    #     logger.info(f"Loaded {model_name} ({settings.YOLO_DETECT_MODEL}) on {device} in {elapsed:.0f}ms")
+    # except Exception as e:
+    #     logger.warning(f"Failed to load {model_name}: {e}")
 
-    # --- Phase 3: Pose estimator (YOLOv8-pose) ---
+    # --- YOLO26 pose estimation (COCO-pose pretrained, auto-downloads) ---
     model_name = "pose_estimator"
     registry[model_name] = {
         "model": None,
@@ -84,7 +72,25 @@ def _load_models() -> dict:
         "variant": settings.YOLO_POSE_MODEL,
     }
 
-    # --- Phase 4: Emotion classifier (FER+) ---
+    # --- YOLO26 face detection (custom fine-tuned, requires ml/weights/) ---
+    model_name = "face_detector"
+    registry[model_name] = {
+        "model": None,
+        "loaded": False,
+        "device": device,
+        "variant": settings.YOLO_FACE_MODEL,
+    }
+
+    # --- ArcFace face recognition (InsightFace) ---
+    model_name = "face_recognizer"
+    registry[model_name] = {
+        "model": None,
+        "loaded": False,
+        "device": device,
+        "variant": settings.ARCFACE_MODEL,
+    }
+
+    # --- FER+ emotion classifier (ONNX) ---
     model_name = "emotion_classifier"
     registry[model_name] = {
         "model": None,
@@ -93,7 +99,7 @@ def _load_models() -> dict:
         "variant": settings.FER_MODEL,
     }
 
-    # --- Phase 4: Behavior classifier ---
+    # --- Behavior classifier (rule-based on pose keypoints) ---
     model_name = "behavior_classifier"
     registry[model_name] = {
         "model": None,
@@ -102,7 +108,7 @@ def _load_models() -> dict:
         "variant": "rule_based_v1",
     }
 
-    # --- Phase 5: Fire detector (YOLOv8-fire) ---
+    # --- YOLO26 fire/smoke detection (custom fine-tuned, requires ml/weights/) ---
     model_name = "fire_detector"
     registry[model_name] = {
         "model": None,
@@ -111,7 +117,7 @@ def _load_models() -> dict:
         "variant": settings.YOLO_FIRE_MODEL,
     }
 
-    # --- Phase 5: Re-ID extractor (OSNet) ---
+    # --- OSNet Re-ID (torchreid) ---
     model_name = "reid_extractor"
     registry[model_name] = {
         "model": None,
@@ -120,7 +126,7 @@ def _load_models() -> dict:
         "variant": settings.OSNET_MODEL,
     }
 
-    # --- Phase 5: Audio classifier (YAMNet) ---
+    # --- YAMNet audio classifier (TensorFlow) ---
     model_name = "audio_classifier"
     registry[model_name] = {
         "model": None,
@@ -140,11 +146,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENV.value}")
     logger.info(f"Device: {settings.DEVICE}")
     logger.info(f"Uploads dir: {settings.UPLOADS_DIR}")
+    logger.info(f"YOLO26 end-to-end (NMS-free): {settings.YOLO_END2END}")
     logger.info("=" * 60)
 
     # Ensure upload directories exist
     settings.images_dir.mkdir(parents=True, exist_ok=True)
     settings.videos_dir.mkdir(parents=True, exist_ok=True)
+
+    # Ensure custom weights directory exists
+    Path("ml/weights").mkdir(parents=True, exist_ok=True)
 
     # Load models
     start = time.perf_counter()
@@ -168,7 +178,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Sentinel ML Service",
-    description="AI inference service for safety and surveillance",
+    description="AI inference service for safety and surveillance — powered by YOLO26",
     version="0.1.0",
     lifespan=lifespan,
 )

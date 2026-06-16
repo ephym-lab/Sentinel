@@ -3,6 +3,15 @@ ML service configuration.
 
 Handles environment-based settings, model variant selection (dev vs prod),
 confidence thresholds, and file path configuration.
+
+YOLO26 Architecture Notes:
+- YOLO26 is a unified model family from Ultralytics (Jan 2026)
+- NMS-free by default (one-to-one head) — no post-processing needed
+- Supports: detection, segmentation, pose estimation, classification, OBB
+- 5 scales: n (nano), s (small), m (medium), l (large), x (extra-large)
+- Face detection and fire detection use the same YOLO26 base, fine-tuned
+  on custom datasets (WIDER FACE for faces, custom fire/smoke dataset)
+- All variants use the same `from ultralytics import YOLO` API
 """
 
 from enum import Enum
@@ -61,33 +70,50 @@ class MLSettings(BaseSettings):
     def videos_dir(self) -> Path:
         return Path(self.UPLOADS_DIR) / "videos"
 
-    # --- Model variants (dev = lightweight, prod = full) ---
-    @property
-    def YOLO_FACE_MODEL(self) -> str:
-        return "yolov8l-face.pt" if self.is_production else "yolov8n-face.pt"
+    # --- YOLO26 model variants ---
+    # Standard pretrained models from Ultralytics (auto-downloaded)
+    # Dev uses nano (n) for CPU speed, prod uses large (l) for accuracy
 
     @property
-    def YOLO_PERSON_MODEL(self) -> str:
-        return "yolov8l.pt" if self.is_production else "yolov8n.pt"
+    def YOLO_DETECT_MODEL(self) -> str:
+        """General object/person detection (COCO pretrained)."""
+        return "yolo26l.pt" if self.is_production else "yolo26n.pt"
 
     @property
     def YOLO_POSE_MODEL(self) -> str:
-        return "yolov8l-pose.pt" if self.is_production else "yolov8n-pose.pt"
+        """Pose estimation — 17 skeletal keypoints (COCO-pose pretrained)."""
+        return "yolo26l-pose.pt" if self.is_production else "yolo26n-pose.pt"
+
+    # Custom fine-tuned YOLO26 models (trained on task-specific datasets)
+    # These must be trained and placed in ml/weights/ before use
+
+    @property
+    def YOLO_FACE_MODEL(self) -> str:
+        """Face detection — fine-tuned on WIDER FACE dataset.
+        Falls back to general detection if custom weights not available."""
+        return "ml/weights/yolo26l-face.pt" if self.is_production else "ml/weights/yolo26n-face.pt"
 
     @property
     def YOLO_FIRE_MODEL(self) -> str:
-        return "yolov8l-fire.pt" if self.is_production else "yolov8n-fire.pt"
+        """Fire/smoke detection — fine-tuned on custom fire dataset.
+        Falls back to general detection if custom weights not available."""
+        return "ml/weights/yolo26l-fire.pt" if self.is_production else "ml/weights/yolo26n-fire.pt"
+
+    # --- Non-YOLO models ---
 
     @property
     def ARCFACE_MODEL(self) -> str:
+        """ArcFace face recognition — 512-dim embeddings."""
         return "buffalo_l" if self.is_production else "buffalo_sc"
 
     @property
     def OSNET_MODEL(self) -> str:
+        """OSNet person Re-ID — 2048-dim embeddings."""
         return "osnet_x1_0" if self.is_production else "osnet_x0_25"
 
     @property
     def FER_MODEL(self) -> str:
+        """FER+ emotion classification via ONNX."""
         return "fer_plus_full.onnx" if self.is_production else "fer_plus_mobile.onnx"
 
     # --- Confidence thresholds ---
@@ -113,6 +139,11 @@ class MLSettings(BaseSettings):
     MAX_FRAME_WIDTH: int = 1280
     MAX_FACES_PER_FRAME: int = 50
     FACE_CROP_SIZE: int = 112
+
+    # --- YOLO26-specific ---
+    YOLO_END2END: bool = True  # True = NMS-free one-to-one head (faster, default)
+    YOLO_MAX_DETECTIONS: int = 300  # Max detections per frame (one-to-one head limit)
+    YOLO_IMGSZ: int = 640  # Input image size for YOLO inference
 
 
 settings = MLSettings()
