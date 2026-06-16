@@ -52,16 +52,15 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.YOLO_DETECT_MODEL,
     }
-    # Actual loading (Phase 3):
-    # try:
-    #     start = time.perf_counter()
-    #     from ultralytics import YOLO
-    #     model = YOLO(settings.YOLO_DETECT_MODEL)
-    #     elapsed = (time.perf_counter() - start) * 1000
-    #     registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
-    #     logger.info(f"Loaded {model_name} ({settings.YOLO_DETECT_MODEL}) on {device} in {elapsed:.0f}ms")
-    # except Exception as e:
-    #     logger.warning(f"Failed to load {model_name}: {e}")
+    try:
+        start = time.perf_counter()
+        from ml.models.person_detector import PersonDetector
+        model = PersonDetector()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.YOLO_DETECT_MODEL}) on {device} in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     # --- YOLO26 pose estimation (COCO-pose pretrained, auto-downloads) ---
     model_name = "pose_estimator"
@@ -71,8 +70,17 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.YOLO_POSE_MODEL,
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.pose_estimator import PoseEstimator
+        model = PoseEstimator()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.YOLO_POSE_MODEL}) on {device} in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
-    # --- YOLO26 face detection (custom fine-tuned, requires ml/weights/) ---
+    # --- YOLO26 face detection (custom fine-tuned or fallback to COCO) ---
     model_name = "face_detector"
     registry[model_name] = {
         "model": None,
@@ -80,6 +88,15 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.YOLO_FACE_MODEL,
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.face_detector import FaceDetector
+        model = FaceDetector()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     # --- ArcFace face recognition (InsightFace) ---
     model_name = "face_recognizer"
@@ -89,6 +106,15 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.ARCFACE_MODEL,
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.face_recognizer import FaceRecognizer
+        model = FaceRecognizer()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.ARCFACE_MODEL}) in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     # --- FER+ emotion classifier (ONNX) ---
     model_name = "emotion_classifier"

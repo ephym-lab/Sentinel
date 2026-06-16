@@ -125,6 +125,16 @@ class MLSettings(BaseSettings):
     EMOTION_CONFIDENCE: float = 0.5
     SHOPLIFTING_CONFIDENCE: float = 0.7
     AUDIO_CONFIDENCE: float = 0.6
+    IOU_THRESHOLD: float = 0.45  # NMS IoU threshold (used even in NMS-free for bbox overlap)
+
+    # --- Shorthand aliases used by model wrappers ---
+    @property
+    def PERSON_CONF_THRESHOLD(self) -> float:
+        return self.PERSON_DETECTION_CONFIDENCE
+
+    @property
+    def FACE_CONF_THRESHOLD(self) -> float:
+        return self.FACE_DETECTION_CONFIDENCE
 
     # --- Threat fusion weights ---
     VISUAL_WEIGHT: float = 0.5

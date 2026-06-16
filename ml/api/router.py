@@ -8,15 +8,23 @@ New route modules are added here as they are built.
 from fastapi import APIRouter
 
 from ml.api.health_routes import router as health_router
+from ml.api.face_routes import router as face_router
+from ml.api.person_routes import router as person_router
 
 api_router = APIRouter()
 
 # Phase 1 — Health
 api_router.include_router(health_router)
 
-# Phase 2 — Face detection/recognition (uncomment when built)
-# from ml.api.face_routes import router as face_router
-# api_router.include_router(face_router, prefix="/face", tags=["Face"])
+# Phase 2 — Face detection/recognition
+api_router.include_router(face_router, prefix="/face", tags=["Face"])
+
+# Phase 3 — Person detection, tracking & pose
+api_router.include_router(person_router, prefix="/person", tags=["Person & Pose"])
+
+# Phase 4 — Behavior & emotion (uncomment when built)
+# from ml.api.behavior_routes import router as behavior_router
+# api_router.include_router(behavior_router, prefix="/behavior", tags=["Behavior"])
 
 # Phase 5 — Audio classification (uncomment when built)
 # from ml.api.audio_routes import router as audio_router
@@ -29,3 +37,4 @@ api_router.include_router(health_router)
 # Phase 6 — Frame processing pipeline (uncomment when built)
 # from ml.api.frame_routes import router as frame_router
 # api_router.include_router(frame_router, prefix="/pipeline", tags=["Pipeline"])
+

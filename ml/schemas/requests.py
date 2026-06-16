@@ -68,3 +68,26 @@ class ReIDExtractRequest(BaseModel):
     """Input for /extract-reid — extract body appearance embedding."""
 
     person_crop_b64: str = Field(..., description="Base64-encoded person crop from detector")
+
+
+class PersonDetectRequest(BaseModel):
+    """Input for /detect-persons — single frame, no tracking."""
+
+    image_b64: str = Field(..., description="Base64-encoded image (JPEG or PNG)")
+
+
+class PersonTrackRequest(BaseModel):
+    """Input for /track-persons or /track-pose — tracking across frames."""
+
+    image_b64: str = Field(..., description="Base64-encoded image frame in sequence order")
+    tracker: str = Field(
+        "bytetrack.yaml",
+        description="Tracker config: 'bytetrack.yaml' or 'botsort.yaml'",
+    )
+
+
+class PoseEstimateRequest(BaseModel):
+    """Input for /estimate-pose — single-frame pose estimation."""
+
+    image_b64: str = Field(..., description="Base64-encoded image (JPEG or PNG)")
+

@@ -120,6 +120,59 @@ class PoseKeypoints(BaseModel):
     )
 
 
+class PersonTrack(BaseModel):
+    """Single detected/tracked person from /detect-persons or /track-persons."""
+
+    track_id: Optional[int] = Field(None, description="ByteTrack ID (None for detect-only)")
+    bbox: list[int] = Field(..., description="[x1, y1, x2, y2]")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class PersonDetectionResult(BaseModel):
+    """Response from /detect-persons."""
+
+    persons: list[PersonTrack]
+    frame_width: int
+    frame_height: int
+    inference_time_ms: float
+
+
+class PersonTrackResult(BaseModel):
+    """Response from /track-persons."""
+
+    tracks: list[PersonTrack]
+    frame_width: int
+    frame_height: int
+    inference_time_ms: float
+
+
+class PoseKeypoint(BaseModel):
+    """Single COCO keypoint with name and confidence."""
+
+    name: str
+    x: float
+    y: float
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class PosePerson(BaseModel):
+    """Single person with full 17-keypoint pose."""
+
+    track_id: Optional[int] = Field(None, description="ByteTrack ID if tracking was used")
+    bbox: list[int] = Field(..., description="[x1, y1, x2, y2]")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    keypoints: list[PoseKeypoint] = Field(..., description="17 COCO keypoints")
+
+
+class PoseEstimationResult(BaseModel):
+    """Response from /estimate-pose or /track-pose."""
+
+    persons: list[PosePerson]
+    frame_width: int
+    frame_height: int
+    inference_time_ms: float
+
+
 # --- Behavior/emotion ---
 
 class BehaviorDetection(BaseModel):
