@@ -270,11 +270,23 @@ async def lifespan(app: FastAPI):
 
 # --- Create app ---
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title="Sentinel ML Service",
     description="AI inference service for safety and surveillance — powered by YOLO26",
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Enable CORS for frontend clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 app.include_router(api_router)

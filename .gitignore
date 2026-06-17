@@ -70,3 +70,4 @@ dmypy.json
 Thumbs.db
 models/
 *.md
+*.db

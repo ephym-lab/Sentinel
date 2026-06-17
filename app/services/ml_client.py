@@ -48,9 +48,9 @@ class MLServiceClient:
         """
         payload = {
             "image_b64": image_b64,
-            "camera_id": camera_id,
+            "camera_id": str(camera_id),
             "mode": mode,
-            "tenant_id": tenant_id,
+            "tenant_id": str(tenant_id),
         }
         if audio_b64:
             payload["audio_b64"] = audio_b64

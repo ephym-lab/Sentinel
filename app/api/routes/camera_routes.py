@@ -195,6 +195,76 @@ async def get_camera(id: uuid.UUID, db: AsyncSession = Depends(get_tenant_db)):
     return camera
 
 
+@router.patch("/{id}", response_model=CameraRead)
+async def update_camera(
+    id: uuid.UUID,
+    data: CameraCreate,
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """Update camera properties (name, zone, camera_type, location, is_active)."""
+    stmt = select(Camera).where(Camera.id == id)
+    result = await db.execute(stmt)
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with ID '{id}' not found."
+        )
+    
+    if data.name is not None:
+        camera.name = data.name
+    if data.zone is not None:
+        camera.zone = data.zone
+        camera.location = data.location or data.zone
+    if data.camera_type is not None:
+        camera.camera_type = data.camera_type
+    if data.location is not None:
+        camera.location = data.location
+    if data.is_active is not None:
+        camera.is_active = data.is_active
+
+    await db.commit()
+    
+    # Reload camera
+    stmt_reload = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    res_reload = await db.execute(stmt_reload)
+    return res_reload.scalar_one()
+
+
+@router.patch("/{id}/feed/{feed_id}/activate", response_model=CameraRead)
+async def activate_camera_feed(
+    id: uuid.UUID,
+    feed_id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """Activate a specific camera feed and deactivate all others."""
+    stmt_cam = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    res_cam = await db.execute(stmt_cam)
+    camera = res_cam.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with ID '{id}' not found."
+        )
+
+    target_feed = None
+    for feed in camera.feeds:
+        if feed.id == feed_id:
+            target_feed = feed
+            feed.is_active = True
+        else:
+            feed.is_active = False
+
+    if not target_feed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Feed '{feed_id}' not found for camera '{id}'."
+        )
+
+    await db.commit()
+    return camera
+
+
 @router.delete("/{id}/feed/{feed_id}", status_code=status.HTTP_200_OK)
 async def delete_camera_feed(
     id: uuid.UUID,
@@ -225,3 +295,40 @@ async def delete_camera_feed(
     await db.delete(feed)
     await db.commit()
     return {"status": "success", "detail": f"Feed '{feed_id}' has been removed."}
+
+
+@router.delete("/{id}", status_code=status.HTTP_200_OK)
+async def delete_camera(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """Delete a camera, its feeds, and files on disk."""
+    # 1. Fetch camera
+    stmt = select(Camera).where(Camera.id == id)
+    result = await db.execute(stmt)
+    camera = result.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with ID '{id}' not found."
+        )
+
+    # 2. Fetch all feeds for this camera to delete files
+    stmt_feeds = select(CameraFeed).where(CameraFeed.camera_id == id)
+    res_feeds = await db.execute(stmt_feeds)
+    feeds = res_feeds.scalars().all()
+    for feed in feeds:
+        if feed.file_path:
+            full_path = Path(settings.UPLOAD_DIR) / feed.file_path
+            if full_path.exists() and full_path.is_file():
+                try:
+                    full_path.unlink()
+                except Exception as e:
+                    logger.error(f"Failed to delete video file {full_path}: {e}")
+        await db.delete(feed)
+
+    # 3. Delete camera record
+    await db.delete(camera)
+    await db.commit()
+    return {"status": "success", "detail": f"Camera '{id}' and all associated feeds have been deleted."}
+

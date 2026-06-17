@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Sentinel Custom Severity & Status Colors */
+  --color-severity-critical: hsl(var(--critical));
+  --color-severity-critical-bg: hsl(var(--critical-bg));
+  --color-severity-high: hsl(var(--high));
+  --color-severity-high-bg: hsl(var(--high-bg));
+  --color-severity-medium: hsl(var(--medium));
+  --color-severity-medium-bg: hsl(var(--medium-bg));
+  --color-severity-info: hsl(var(--info));
+  --color-severity-info-bg: hsl(var(--info-bg));
+  --color-severity-success: hsl(var(--success));
+  --color-severity-success-bg: hsl(var(--success-bg));
+  --color-severity-offline: hsl(var(--offline));
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 224 71.4% 4.1%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 224 71.4% 4.1%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 71.4% 4.1%;
+  
+  --primary: 224 71.4% 4.1%;
+  --primary-foreground: 210 20% 98%;
+  
+  --secondary: 220 14.3% 95.9%;
+  --secondary-foreground: 220.9 39.3% 11%;
+  
+  --muted: 220 14.3% 95.9%;
+  --muted-foreground: 220 8.9% 46.1%;
+  
+  --accent: 220 14.3% 95.9%;
+  --accent-foreground: 220.9 39.3% 11%;
+  
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 20% 98%;
+  
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 224 71.4% 4.1%;
+  
+  --radius: 0.5rem;
+
+  /* Severity colors */
+  --critical: 0 84.2% 60.2%;
+  --critical-bg: 0 84.2% 60.2% / 0.1;
+  --high: 24.6 95% 53.1%;
+  --high-bg: 24.6 95% 53.1% / 0.1;
+  --medium: 37.9 90.2% 51.2%;
+  --medium-bg: 37.9 90.2% 51.2% / 0.1;
+  --info: 217.2 91.2% 59.8%;
+  --info-bg: 217.2 91.2% 59.8% / 0.1;
+  --success: 142.1 76.2% 36.3%;
+  --success-bg: 142.1 76.2% 36.3% / 0.1;
+  --offline: 0 84.2% 60.2% / 0.6;
+}
+
+.dark {
+  --background: 224 71.4% 4.1%;
+  --foreground: 210 20% 98%;
+  
+  --card: 224 71.4% 4.1%;
+  --card-foreground: 210 20% 98%;
+  
+  --popover: 224 71.4% 4.1%;
+  --popover-foreground: 210 20% 98%;
+  
+  --primary: 210 20% 98%;
+  --primary-foreground: 220.9 39.3% 11%;
+  
+  --secondary: 215 27.9% 16.9%;
+  --secondary-foreground: 210 20% 98%;
+  
+  --muted: 215 27.9% 16.9%;
+  --muted-foreground: 217.9 10.6% 64.9%;
+  
+  --accent: 215 27.9% 16.9%;
+  --accent-foreground: 210 20% 98%;
+  
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 20% 98%;
+  
+  --border: 215 27.9% 16.9%;
+  --input: 215 27.9% 16.9%;
+  --ring: 216 12.2% 83.9%;
+
+  /* Severity colors */
+  --critical: 0 84.2% 60.2%;
+  --critical-bg: 0 84.2% 60.2% / 0.15;
+  --high: 24.6 95% 53.1%;
+  --high-bg: 24.6 95% 53.1% / 0.15;
+  --medium: 37.9 90.2% 51.2%;
+  --medium-bg: 37.9 90.2% 51.2% / 0.15;
+  --info: 217.2 91.2% 59.8%;
+  --info-bg: 217.2 91.2% 59.8% / 0.15;
+  --success: 142.1 70.6% 45.3%;
+  --success-bg: 142.1 70.6% 45.3% / 0.15;
+  --offline: 0 84.2% 60.2% / 0.6;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  margin: 0;
+}

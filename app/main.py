@@ -95,13 +95,35 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.getLogger(__name__).error(f"Lifespan database initialization failed: {e}")
 
+    # 2. Seed default mock tenant for local development
+    try:
+        import uuid
+        from app.db.session import AsyncSessionLocal
+        from app.services.tenant_service import get_tenant_by_id, create_tenant
+        from app.schemas.tenant import TenantCreate
+        
+        async with AsyncSessionLocal() as db:
+            mock_tenant_id = uuid.UUID("d3b07384-d113-4ec6-a558-7ced2c45e54d")
+            existing = await get_tenant_by_id(db, mock_tenant_id)
+            if not existing:
+                await create_tenant(
+                    db,
+                    TenantCreate(
+                        id=mock_tenant_id,
+                        name="Sentinel Academy",
+                        mode="school"
+                    )
+                )
+                logging.getLogger(__name__).info("Successfully seeded default mock tenant 'Sentinel Academy' into database.")
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Failed to seed default mock tenant: {e}")
+
 
     # Start notification escalation background scheduler
     try:
         from app.core.scheduler import start_scheduler
         start_scheduler()
     except Exception as e:
-        import logging
         logging.getLogger(__name__).error(f"Failed to start scheduler: {e}")
         
     yield
@@ -111,14 +133,23 @@ async def lifespan(app: FastAPI):
         from app.core.scheduler import shutdown_scheduler
         shutdown_scheduler()
     except Exception as e:
-        import logging
         logging.getLogger(__name__).error(f"Failed to stop scheduler: {e}")
 
 
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import websocket_routes
 
 app = FastAPI(title=settings.PROJECT_NAME, version="0.1.0", lifespan=lifespan)
+
+# Enable CORS for frontend clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(websocket_routes.router, prefix="/ws")

@@ -1,3 +1,4 @@
+from uuid import UUID
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -17,7 +18,7 @@ class PersonCreate(PersonBase):
 
 
 class PersonRead(PersonBase):
-    id: str
+    id: UUID
     photo_path: Optional[str] = None
     enrolled_at: datetime
     last_seen_at: Optional[datetime] = None

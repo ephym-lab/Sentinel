@@ -391,6 +391,8 @@ async def process_camera_frame(
         "ml_raw_metrics": {
             "faces_count": len(ml_result.get("faces", [])),
             "persons_count": len(ml_result.get("tracked_persons", [])),
+            "tracked_persons": ml_result.get("tracked_persons", []),
+            "fire_detections": ml_result.get("fire_detections", []),
             "behaviors": ml_result.get("behaviors", []),
             "fire_detected": is_fire,
             "audio_events": ml_result.get("audio_events", [])
