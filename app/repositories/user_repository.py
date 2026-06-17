@@ -1,19 +1,43 @@
-from sqlalchemy.orm import Session
+import uuid
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.schemas.user import UserCreate
 
 
-def get_all(db: Session) -> list[User]:
-    return db.query(User).all()
+async def get_all(db: AsyncSession) -> list[User]:
+    """Retrieve all users in the system asynchronously."""
+    stmt = select(User)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
-def get_by_id(db: Session, user_id: int) -> User | None:
-    return db.query(User).filter(User.id == user_id).first()
+async def get_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+    """Retrieve a single user by their UUID asynchronously."""
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
-def create(db: Session, data: UserCreate) -> User:
-    user = User(**data.model_dump())
+async def get_by_email(db: AsyncSession, email: str) -> User | None:
+    """Retrieve a user by email asynchronously."""
+    stmt = select(User).where(User.email == email)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def create(db: AsyncSession, data: UserCreate) -> User:
+    """Create a new user asynchronously. In a real environment, we'd hash the password here."""
+    # Dummy hashing for MVP/local-first
+    password_hash = f"hashed_{data.password}" if data.password else None
+    
+    user = User(
+        name=data.name,
+        email=data.email,
+        password_hash=password_hash,
+        role=data.role
+    )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user

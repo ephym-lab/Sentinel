@@ -1,11 +1,14 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories import user_repository
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import UserCreate
+from app.models.user import User
 
 
-def list_users(db: Session) -> list[UserRead]:
-    return user_repository.get_all(db)
+async def list_users(db: AsyncSession) -> list[User]:
+    """List all users asynchronously."""
+    return await user_repository.get_all(db)
 
 
-def create_user(db: Session, data: UserCreate) -> UserRead:
-    return user_repository.create(db, data)
+async def create_user(db: AsyncSession, data: UserCreate) -> User:
+    """Create a user asynchronously."""
+    return await user_repository.create(db, data)
