@@ -10,6 +10,10 @@ from fastapi import APIRouter
 from ml.api.health_routes import router as health_router
 from ml.api.face_routes import router as face_router
 from ml.api.person_routes import router as person_router
+from ml.api.behavior_routes import router as behavior_router
+from ml.api.fire_routes import router as fire_router
+from ml.api.audio_routes import router as audio_router
+from ml.api.reid_routes import router as reid_router
 
 api_router = APIRouter()
 
@@ -22,19 +26,19 @@ api_router.include_router(face_router, prefix="/face", tags=["Face"])
 # Phase 3 — Person detection, tracking & pose
 api_router.include_router(person_router, prefix="/person", tags=["Person & Pose"])
 
-# Phase 4 — Behavior & emotion (uncomment when built)
-# from ml.api.behavior_routes import router as behavior_router
-# api_router.include_router(behavior_router, prefix="/behavior", tags=["Behavior"])
+# Phase 4 — Behavior & emotion
+api_router.include_router(behavior_router, prefix="/behavior", tags=["Behavior & Emotion"])
 
-# Phase 5 — Audio classification (uncomment when built)
-# from ml.api.audio_routes import router as audio_router
-# api_router.include_router(audio_router, prefix="/audio", tags=["Audio"])
+# Phase 5 — Fire & safety
+api_router.include_router(fire_router, prefix="/fire", tags=["Fire & Safety"])
 
-# Phase 5 — POI matching (uncomment when built)
-# from ml.api.poi_routes import router as poi_router
-# api_router.include_router(poi_router, prefix="/poi", tags=["POI"])
+# Phase 5 — Audio classification
+api_router.include_router(audio_router, prefix="/audio", tags=["Audio"])
 
-# Phase 6 — Frame processing pipeline (uncomment when built)
-# from ml.api.frame_routes import router as frame_router
-# api_router.include_router(frame_router, prefix="/pipeline", tags=["Pipeline"])
+# Phase 5 — Re-ID
+api_router.include_router(reid_router, prefix="/reid", tags=["Re-ID"])
+
+# Phase 6 — Frame processing pipeline
+from ml.api.frame_routes import router as frame_router
+api_router.include_router(frame_router, prefix="/pipeline", tags=["Pipeline"])
 

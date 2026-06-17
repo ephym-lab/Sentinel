@@ -124,6 +124,15 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.FER_MODEL,
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.emotion_classifier import EmotionClassifier
+        model = EmotionClassifier()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.FER_MODEL}) in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     # --- Behavior classifier (rule-based on pose keypoints) ---
     model_name = "behavior_classifier"
@@ -133,6 +142,15 @@ def _load_models() -> dict:
         "device": device,
         "variant": "rule_based_v1",
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.behavior_classifier import BehaviorClassifier
+        model = BehaviorClassifier()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} (rule_based_v1) in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     # --- YOLO26 fire/smoke detection (custom fine-tuned, requires ml/weights/) ---
     model_name = "fire_detector"
@@ -142,6 +160,17 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.YOLO_FIRE_MODEL,
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.fire_detector import FireDetector
+        model = FireDetector()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.YOLO_FIRE_MODEL}) in {elapsed:.0f}ms")
+    except FileNotFoundError as e:
+        logger.warning(f"Skipping {model_name}: {e}")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     # --- OSNet Re-ID (torchreid) ---
     model_name = "reid_extractor"
@@ -151,8 +180,17 @@ def _load_models() -> dict:
         "device": device,
         "variant": settings.OSNET_MODEL,
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.reid_extractor import ReIDExtractor
+        model = ReIDExtractor()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.OSNET_MODEL}) in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
-    # --- YAMNet audio classifier (TensorFlow) ---
+    # --- YAMNet audio classifier (TensorFlow Hub) ---
     model_name = "audio_classifier"
     registry[model_name] = {
         "model": None,
@@ -160,6 +198,15 @@ def _load_models() -> dict:
         "device": device,
         "variant": "yamnet_v1",
     }
+    try:
+        start = time.perf_counter()
+        from ml.models.audio_classifier import AudioClassifier
+        model = AudioClassifier()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} (yamnet_v1) in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
 
     return registry
 

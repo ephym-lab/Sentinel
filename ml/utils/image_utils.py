@@ -57,6 +57,10 @@ def resize_frame(frame: np.ndarray, max_width: int = 1280) -> np.ndarray:
     return cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
 
+# Alias used by pipeline
+resize_if_needed = resize_frame
+
+
 def align_and_crop_face(
     frame: np.ndarray,
     bbox: tuple[int, int, int, int],

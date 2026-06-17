@@ -24,8 +24,9 @@ class FrameInput(BaseModel):
     camera_id: str = Field(..., description="Camera identifier for location tracking")
     mode: DeploymentMode = Field(..., description="Deployment mode determines which detections run")
     tenant_id: str = Field(..., description="Tenant identifier for multi-tenancy DB lookups")
-    timestamp: Optional[str] = Field(None, description="ISO 8601 timestamp of frame capture")
+    timestamp: str | None = Field(None, description="ISO 8601 timestamp of frame capture")
     include_audio: bool = Field(False, description="Whether audio data is included for fusion")
+    audio_b64: str | None = Field(None, description="Base64-encoded WAV audio (16kHz mono) — used when include_audio=True")
 
 
 class FaceDetectRequest(BaseModel):
