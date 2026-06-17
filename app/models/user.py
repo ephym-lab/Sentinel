@@ -11,3 +11,6 @@ class User(SharedBase):
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=True)  # Store encrypted passwords
     role = Column(String, nullable=False, default="security_guard")  # guard, teacher, admin, principal, store_manager, etc.
+    tenant_id = Column(UUID(as_uuid=True), nullable=True)  # Scoped tenant ID (null for super_admin)
+
+

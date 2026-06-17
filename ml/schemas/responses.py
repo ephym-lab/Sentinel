@@ -5,6 +5,7 @@ Structured outputs returned by each ML endpoint, designed to be consumed
 by the backend service for incident creation, POI tracking, and notifications.
 """
 
+import uuid
 from enum import Enum
 from typing import Optional
 
@@ -90,7 +91,7 @@ class FaceEmbeddingResult(BaseModel):
 class FaceMatchResult(BaseModel):
     """A single face match against known persons."""
 
-    person_id: Optional[str] = None
+    person_id: Optional[uuid.UUID] = None
     full_name: Optional[str] = None
     person_type: Optional[str] = None
     similarity_score: float = Field(..., ge=0.0, le=1.0)
@@ -228,7 +229,7 @@ class AudioClassifyResult(BaseModel):
 class POIMatch(BaseModel):
     """Match result against a Person of Interest."""
 
-    poi_id: str
+    poi_id: uuid.UUID
     match_type: MatchType
     face_score: Optional[float] = None
     reid_score: Optional[float] = None
@@ -265,7 +266,7 @@ class ThreatAssessment(BaseModel):
 class FrameProcessingResult(BaseModel):
     """Complete response from /process-frame — the main pipeline output."""
 
-    camera_id: str
+    camera_id: uuid.UUID
     timestamp: str
     mode: str
     inference_time_ms: float
@@ -316,3 +317,4 @@ class HealthResponse(BaseModel):
     device: str
     environment: str
     models: list[ModelStatus] = []
+

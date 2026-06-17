@@ -38,15 +38,15 @@ async def ingest_detection(
     request: DetectionIngestRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_tenant_db),
-    tenant_id: str = Header(..., alias="X-Tenant-ID")
+    tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID")
 ):
     """Ingest raw edge detection event. Dispatches to Redis and returns 202 immediately (< 50ms)."""
     # 1. Publish to Redis Pub/Sub immediately for real-time WebSocket dashboard streaming
     payload = request.model_dump()
-    payload["tenant_id"] = tenant_id
+    payload["tenant_id"] = str(tenant_id)
     
     await event_bus.publish(
-        channel=f"sentinel:{tenant_id}:events",
+        channel=f"sentinel:{str(tenant_id)}:events",
         event_type="detection",
         payload=payload
     )
@@ -55,3 +55,4 @@ async def ingest_detection(
     background_tasks.add_task(save_detection_to_db, db, request)
     
     return {"status": "accepted"}
+

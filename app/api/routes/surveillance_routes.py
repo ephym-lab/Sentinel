@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_tenant_db
@@ -12,8 +13,9 @@ router = APIRouter()
 async def process_frame(
     request: FrameUploadRequest,
     db: AsyncSession = Depends(get_tenant_db),
-    tenant_id: str = Header(..., alias="X-Tenant-ID")
+    tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID")
 ):
+
     """Process a single frame from a camera:
     
     1. Sends the image (and optional audio) to the ML service.

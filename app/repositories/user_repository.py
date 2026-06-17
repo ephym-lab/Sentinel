@@ -27,17 +27,19 @@ async def get_by_email(db: AsyncSession, email: str) -> User | None:
 
 
 async def create(db: AsyncSession, data: UserCreate) -> User:
-    """Create a new user asynchronously. In a real environment, we'd hash the password here."""
-    # Dummy hashing for MVP/local-first
-    password_hash = f"hashed_{data.password}" if data.password else None
+    """Create a new user asynchronously. Hashes the password using pwd_context."""
+    from app.core.security import hash_password
+    password_hash = hash_password(data.password) if data.password else None
     
     user = User(
         name=data.name,
         email=data.email,
         password_hash=password_hash,
-        role=data.role
+        role=data.role,
+        tenant_id=data.tenant_id
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     return user
+

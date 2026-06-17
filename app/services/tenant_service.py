@@ -1,4 +1,5 @@
 import logging
+import uuid
 from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import engine, TenantBase
@@ -9,9 +10,31 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def create_tenant_schema_tables(tenant_id: str):
-    """Create a new PostgreSQL schema (sentinel_<tenant_id>) and generate tenant tables within it asynchronously."""
-    schema_name = f"sentinel_{tenant_id}"
+async def create_tenant_schema_tables(tenant_id: uuid.UUID):
+    """Create a new PostgreSQL schema and generate tenant tables within it asynchronously."""
+    from app.db.session import AsyncSessionLocal
+    
+    schema_name = f"sentinel_{str(tenant_id).lower().replace('-', '_')}"
+    async with AsyncSessionLocal() as session:
+        if not settings.DATABASE_URL.startswith("sqlite"):
+            await session.execute(text("SET search_path TO sentinel_public;"))
+        res = await session.execute(text("SELECT schema_name FROM tenants WHERE id = :id"), {"id": str(tenant_id)})
+        row = res.fetchone()
+        if row and row[0]:
+            schema_name = row[0]
+
+    # Explicitly import all tenant-specific models so they register on TenantBase
+    from app.models.camera import Camera
+    from app.models.poi import POI
+    from app.models.notification_recipient import NotificationRecipient
+    from app.models.poi_sighting import POISighting
+    from app.models.detection_event import DetectionEvent
+    from app.models.customer_visit import CustomerVisit
+    from app.models.journey_event import JourneyEvent
+    from app.models.guardian import Guardian
+    from app.models.person import Person
+    from app.models.incident import Incident
+    from app.models.notification_log import NotificationLog
     
     async with engine.begin() as conn:
         if not settings.DATABASE_URL.startswith("sqlite"):
@@ -28,11 +51,16 @@ async def create_tenant_schema_tables(tenant_id: str):
 
 async def create_tenant(db: AsyncSession, data: TenantCreate) -> Tenant:
     """Create a tenant record in the shared schema and initialize its schema and tables."""
+    schema_name = f"sentinel_{str(data.id).lower().replace('-', '_')}"
+    
     # 1. Create tenant record in database
     tenant = Tenant(
         id=data.id,
         name=data.name,
-        mode=data.mode,
+        schema_name=schema_name,
+        environment_type=data.mode,
+        status="active",
+        config={}
     )
     db.add(tenant)
     await db.commit()
@@ -51,8 +79,9 @@ async def list_tenants(db: AsyncSession) -> list[Tenant]:
     return list(result.scalars().all())
 
 
-async def get_tenant_by_id(db: AsyncSession, tenant_id: str) -> Tenant | None:
+async def get_tenant_by_id(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant | None:
     """Get a tenant by its ID/slug."""
     stmt = select(Tenant).where(Tenant.id == tenant_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+

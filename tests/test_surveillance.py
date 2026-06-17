@@ -22,7 +22,7 @@ def setup_db():
 @patch("app.services.ml_client.ml_client.process_frame", new_callable=AsyncMock)
 def test_full_surveillance_flow(mock_process_frame):
     # 1. Create a Tenant
-    tenant_id = f"test-tenant-{random.randint(1000, 9999)}"
+    tenant_id = str(uuid.uuid4())
     tenant_payload = {
         "id": tenant_id,
         "name": "Test Academy",

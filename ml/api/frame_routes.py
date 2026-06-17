@@ -12,6 +12,7 @@ import base64
 import logging
 import time
 
+import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -27,7 +28,8 @@ router = APIRouter(tags=["Pipeline"])
 class PipelineResult(BaseModel):
     """Simplified pipeline response sent to backend."""
 
-    camera_id: str
+    camera_id: uuid.UUID
+
     timestamp: str
     mode: str
     inference_time_ms: float

@@ -5,6 +5,7 @@ All inputs use base64-encoded images/audio to avoid multipart complexity
 in service-to-service communication.
 """
 
+import uuid
 from enum import Enum
 from typing import Optional
 
@@ -21,9 +22,9 @@ class FrameInput(BaseModel):
     """Input for the main /process-frame pipeline endpoint."""
 
     image_b64: str = Field(..., description="Base64-encoded camera frame (JPEG or PNG)")
-    camera_id: str = Field(..., description="Camera identifier for location tracking")
+    camera_id: uuid.UUID = Field(..., description="Camera identifier for location tracking")
     mode: DeploymentMode = Field(..., description="Deployment mode determines which detections run")
-    tenant_id: str = Field(..., description="Tenant identifier for multi-tenancy DB lookups")
+    tenant_id: uuid.UUID = Field(..., description="Tenant identifier for multi-tenancy DB lookups")
     timestamp: str | None = Field(None, description="ISO 8601 timestamp of frame capture")
     include_audio: bool = Field(False, description="Whether audio data is included for fusion")
     audio_b64: str | None = Field(None, description="Base64-encoded WAV audio (16kHz mono) — used when include_audio=True")
@@ -46,14 +47,14 @@ class FaceEnrollRequest(BaseModel):
     """Input for /enroll-embedding — generate embedding for DB storage."""
 
     image_b64: str = Field(..., description="Base64-encoded photo containing exactly one face")
-    person_id: str = Field(..., description="Person UUID for linking the embedding")
+    person_id: uuid.UUID = Field(..., description="Person UUID for linking the embedding")
 
 
 class AudioClassifyRequest(BaseModel):
     """Input for /classify-audio — classify an audio chunk."""
 
     audio_b64: str = Field(..., description="Base64-encoded audio (WAV, 16kHz mono)")
-    camera_id: Optional[str] = Field(None, description="Associated camera/microphone ID")
+    camera_id: Optional[uuid.UUID] = Field(None, description="Associated camera/microphone ID")
     duration_ms: int = Field(1000, description="Duration of the audio chunk in milliseconds")
 
 
@@ -62,7 +63,7 @@ class POIMatchRequest(BaseModel):
 
     face_embedding: Optional[list[float]] = Field(None, description="512-dim ArcFace embedding")
     reid_embedding: Optional[list[float]] = Field(None, description="2048-dim OSNet Re-ID embedding")
-    tenant_id: str = Field(..., description="Tenant identifier")
+    tenant_id: uuid.UUID = Field(..., description="Tenant identifier")
 
 
 class ReIDExtractRequest(BaseModel):
@@ -91,4 +92,5 @@ class PoseEstimateRequest(BaseModel):
     """Input for /estimate-pose — single-frame pose estimation."""
 
     image_b64: str = Field(..., description="Base64-encoded image (JPEG or PNG)")
+
 
