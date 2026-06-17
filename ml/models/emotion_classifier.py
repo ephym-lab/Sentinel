@@ -64,7 +64,7 @@ class EmotionClassifier:
         import onnxruntime as ort
         from pathlib import Path
 
-        model_path = f"ml/weights/{settings.FER_MODEL}"
+        model_path = settings.FER_MODEL
 
         if not Path(model_path).exists():
             raise FileNotFoundError(

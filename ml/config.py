@@ -63,6 +63,14 @@ class MLSettings(BaseSettings):
     UPLOADS_DIR: str = "uploads"
 
     @property
+    def MODELS_DIR(self) -> Path:
+        """Centralized models directory at project root to hold all model weights."""
+        root = Path(__file__).resolve().parent.parent
+        folder = root / "models"
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder
+
+    @property
     def images_dir(self) -> Path:
         return Path(self.UPLOADS_DIR) / "images"
 
@@ -77,27 +85,30 @@ class MLSettings(BaseSettings):
     @property
     def YOLO_DETECT_MODEL(self) -> str:
         """General object/person detection (COCO pretrained)."""
-        return "yolo26l.pt" if self.is_production else "yolo26n.pt"
+        name = "yolo26l.pt" if self.is_production else "yolo26n.pt"
+        return str(self.MODELS_DIR / name)
 
     @property
     def YOLO_POSE_MODEL(self) -> str:
         """Pose estimation — 17 skeletal keypoints (COCO-pose pretrained)."""
-        return "yolo26l-pose.pt" if self.is_production else "yolo26n-pose.pt"
+        name = "yolo26l-pose.pt" if self.is_production else "yolo26n-pose.pt"
+        return str(self.MODELS_DIR / name)
 
     # Custom fine-tuned YOLO26 models (trained on task-specific datasets)
-    # These must be trained and placed in ml/weights/ before use
 
     @property
     def YOLO_FACE_MODEL(self) -> str:
         """Face detection — fine-tuned on WIDER FACE dataset.
         Falls back to general detection if custom weights not available."""
-        return "ml/weights/yolo26l-face.pt" if self.is_production else "ml/weights/yolo26n-face.pt"
+        name = "yolo26l-face.pt" if self.is_production else "yolo26n-face.pt"
+        return str(self.MODELS_DIR / name)
 
     @property
     def YOLO_FIRE_MODEL(self) -> str:
         """Fire/smoke detection — fine-tuned on custom fire dataset.
         Falls back to general detection if custom weights not available."""
-        return "ml/weights/yolo26l-fire.pt" if self.is_production else "ml/weights/yolo26n-fire.pt"
+        name = "yolo26l-fire.pt" if self.is_production else "yolo26n-fire.pt"
+        return str(self.MODELS_DIR / name)
 
     # --- Non-YOLO models ---
 
@@ -114,7 +125,8 @@ class MLSettings(BaseSettings):
     @property
     def FER_MODEL(self) -> str:
         """FER+ emotion classification via ONNX."""
-        return "fer_plus_full.onnx" if self.is_production else "fer_plus_mobile.onnx"
+        name = "fer_plus_full.onnx" if self.is_production else "fer_plus_mobile.onnx"
+        return str(self.MODELS_DIR / name)
 
     # --- Confidence thresholds ---
     FACE_DETECTION_CONFIDENCE: float = 0.5
