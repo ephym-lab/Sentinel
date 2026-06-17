@@ -27,7 +27,6 @@ from app.schemas.platform import (
     SupportTicketRead,
 )
 from app.services import tenant_service
-from app.main import error_log_handler  # In-memory error handler
 
 logger = logging.getLogger(__name__)
 
@@ -474,6 +473,7 @@ async def get_system_errors(
     super_admin: User = Depends(get_super_admin)
 ):
     """Retrieve recent application backend & worker error logs."""
+    from app.main import error_log_handler
     logs = list(error_log_handler.buffer)
     if not logs:
         # Fallback to display mock logs so table looks loaded

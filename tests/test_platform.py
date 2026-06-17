@@ -6,15 +6,10 @@ from app.core.security import decode_access_token
 
 
 @pytest.fixture(scope="module", autouse=True)
-def clean_test_db():
-    for db_file in ["test.db", "app.db"]:
-        if os.path.exists(db_file):
-            try:
-                os.remove(db_file)
-            except Exception:
-                pass
+def setup_test_client():
     with TestClient(app) as _:
         yield
+
 
 
 

@@ -237,14 +237,35 @@ async def lifespan(app: FastAPI):
     loaded_count = sum(1 for m in app.state.model_registry.values() if m["loaded"])
     total_count = len(app.state.model_registry)
     logger.info(f"Models loaded: {loaded_count}/{total_count} in {total_ms:.0f}ms")
-    logger.info("ML Service ready — accepting requests")
+    
+    # Start camera worker pool
+    import asyncio
+    from ml.pipeline.worker_pool import CameraWorkerPool
+    worker_pool = CameraWorkerPool()
+    app.state.worker_pool = worker_pool
+    polling_task = asyncio.create_task(worker_pool.start_polling_loop())
+    
+    logger.info("ML Service ready — accepting requests and running workers")
 
     yield
 
     # Shutdown
-    logger.info("Sentinel ML Service shutting down — releasing models...")
+    logger.info("Sentinel ML Service shutting down — releasing models & stopping workers...")
+    polling_task.cancel()
+    try:
+        await polling_task
+    except asyncio.CancelledError:
+        pass
+    
+    try:
+        await worker_pool.stop_all()
+    except Exception as e:
+        logger.error(f"Error stopping worker pool: {e}")
+        
     app.state.model_registry.clear()
     logger.info("Shutdown complete")
+
+
 
 
 # --- Create app ---
