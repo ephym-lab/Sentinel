@@ -14,6 +14,12 @@ class UserCreate(UserBase):
     password: Optional[str] = Field(None, description="Raw password, hashed on creation")
 
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
+
 
 class UserRead(UserBase):
     id: uuid.UUID

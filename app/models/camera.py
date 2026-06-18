@@ -8,6 +8,7 @@ class Camera(TenantBase):
     __tablename__ = "cameras"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=True, index=True)
 
     name = Column(String, nullable=False)
     location = Column(String, nullable=True)

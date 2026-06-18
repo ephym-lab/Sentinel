@@ -21,7 +21,7 @@ export default function Login() {
 
     try {
       const response = await api.post("/auth/login", { email, password });
-      const { access_token, role, tenant_id, is_super_admin } = response.data;
+      const { access_token, role, tenant_id, tenant_name, environment_type, is_super_admin } = response.data;
 
       // Extract user info
       const user = {
@@ -31,14 +31,18 @@ export default function Login() {
         role: role,
       };
 
-      // Mock the tenant info until we add a proper /tenant/me route
-      const tenant = {
-        id: tenant_id || "global",
-        name: "Sentinel Workspace",
-        mode: "mall" as any,
-      };
+      const tenant = tenant_id ? {
+        id: tenant_id,
+        name: tenant_name || "Sentinel Workspace",
+        mode: environment_type || "school",
+      } : null;
 
-      setAuth(tenant, user, access_token);
+      if (tenant) {
+        setAuth(tenant, user, access_token);
+      } else {
+        // Fallback or super admin logic
+        setAuth({ id: "global", name: "Global Admin", mode: "school" }, user, access_token);
+      }
       router.push("/monitor");
     } catch (err: any) {
       console.error(err);

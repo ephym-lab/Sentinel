@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface Tenant {
   id: string;
@@ -21,10 +22,17 @@ interface AuthState {
   clearAuth: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  tenant: null,
-  user: null,
-  token: null,
-  setAuth: (tenant, user, token) => set({ tenant, user, token }),
-  clearAuth: () => set({ tenant: null, user: null, token: null }),
-}));
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      tenant: null,
+      user: null,
+      token: null,
+      setAuth: (tenant, user, token) => set({ tenant, user, token }),
+      clearAuth: () => set({ tenant: null, user: null, token: null }),
+    }),
+    {
+      name: "auth-storage", // key in localStorage
+    }
+  )
+);

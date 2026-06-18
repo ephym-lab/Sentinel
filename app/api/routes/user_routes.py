@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_session, reusable_oauth2
-from app.schemas.user import UserCreate, UserRead
+from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services import user_service
 from app.core.security import decode_access_token
 
@@ -38,4 +38,26 @@ async def create_user(
                     detail="Cannot create a super_admin without existing super_admin privileges."
                 )
     return await user_service.create_user(db, data)
+
+
+@router.patch("/me", response_model=UserRead)
+async def update_user_me(
+    data: UserUpdate,
+    db: AsyncSession = Depends(get_session),
+    token: HTTPAuthorizationCredentials = Depends(reusable_oauth2)
+):
+    """Update current user profile."""
+    payload = decode_access_token(token.credentials)
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    
+    user_id_str = payload.get("sub")
+    import uuid
+    user_id = uuid.UUID(user_id_str)
+    
+    user = await user_repository.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+    return await user_repository.update(db, user, data)
 

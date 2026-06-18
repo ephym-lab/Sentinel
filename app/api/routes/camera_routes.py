@@ -46,7 +46,11 @@ def validate_video_content(file_head: bytes) -> bool:
 
 
 @router.post("/", response_model=CameraRead, status_code=status.HTTP_201_CREATED)
-async def register_camera(data: CameraCreate, db: AsyncSession = Depends(get_tenant_db)):
+async def register_camera(
+    data: CameraCreate, 
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"), 
+    db: AsyncSession = Depends(get_tenant_db)
+):
     """Register a new camera within the tenant's schema space asynchronously."""
     camera_uuid = data.id or uuid.uuid4()
 
@@ -66,7 +70,8 @@ async def register_camera(data: CameraCreate, db: AsyncSession = Depends(get_ten
         id=camera_uuid,
         name=data.name,
         location=location_val,
-        is_active=data.is_active
+        is_active=data.is_active,
+        tenant_id=x_tenant_id
     )
     db.add(camera)
     await db.commit()
@@ -174,17 +179,24 @@ async def upload_camera_feed(
 
 
 @router.get("/", response_model=list[CameraRead])
-async def list_cameras(db: AsyncSession = Depends(get_tenant_db)):
+async def list_cameras(
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_tenant_db)
+):
     """List all registered cameras for the tenant with active feed details."""
-    stmt = select(Camera).options(selectinload(Camera.feeds))
+    stmt = select(Camera).options(selectinload(Camera.feeds)).where(Camera.tenant_id == x_tenant_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
 @router.get("/{id}", response_model=CameraRead)
-async def get_camera(id: uuid.UUID, db: AsyncSession = Depends(get_tenant_db)):
+async def get_camera(
+    id: uuid.UUID,
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_tenant_db)
+):
     """Retrieve camera details and feed history."""
-    stmt = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    stmt = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id, Camera.tenant_id == x_tenant_id)
     result = await db.execute(stmt)
     camera = result.scalar_one_or_none()
     if not camera:

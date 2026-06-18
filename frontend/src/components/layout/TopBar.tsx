@@ -14,11 +14,14 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "src/store/authStore";
 import { useAlertStore } from "src/store/alertStore";
+import api from "src/lib/api";
+import { useRouter } from "next/router";
 
 export default function TopBar() {
   const { theme, setTheme } = useTheme();
   const { tenant, user, clearAuth } = useAuthStore();
   const { isMuted, toggleMute, unreadAlertsCount, clearUnreadCount } = useAlertStore();
+  const router = useRouter();
   
   const [mounted, setMounted] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -29,7 +32,12 @@ export default function TopBar() {
     setMounted(true);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (err) {
+      console.error("Logout API failed, continuing client logout", err);
+    }
     clearAuth();
     window.location.href = "/login";
   };
@@ -153,7 +161,7 @@ export default function TopBar() {
               <button
                 onClick={() => {
                   setIsProfileOpen(false);
-                  window.location.href = "/admin/notifications";
+                  router.push("/settings");
                 }}
                 className="w-full text-left px-4 py-2 text-xs text-slate-300 hover:bg-slate-800/50 hover:text-white flex items-center gap-2 transition-all"
               >

@@ -28,6 +28,8 @@ class TokenResponse(BaseModel):
     token_type: str
     role: str
     tenant_id: uuid.UUID | None = None
+    tenant_name: str | None = None
+    environment_type: str | None = None
     is_super_admin: bool = False
 
 
@@ -51,11 +53,26 @@ async def login_json(data: LoginRequest, db: AsyncSession = Depends(get_session)
     }
     
     token = create_access_token(token_data)
+    # Fetch tenant if exists
+    tenant_name = None
+    environment_type = None
+    if user.tenant_id:
+        from app.models.tenant import Tenant
+        from sqlalchemy import select
+        stmt = select(Tenant).where(Tenant.id == user.tenant_id)
+        res = await db.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        if tenant:
+            tenant_name = tenant.name
+            environment_type = tenant.environment_type
+
     return {
         "access_token": token,
         "token_type": "bearer",
         "role": user.role,
         "tenant_id": user.tenant_id,
+        "tenant_name": tenant_name,
+        "environment_type": environment_type,
         "is_super_admin": is_super
     }
 
@@ -113,6 +130,8 @@ async def register_tenant(data: RegisterRequest, db: AsyncSession = Depends(get_
         "token_type": "bearer",
         "role": new_user.role,
         "tenant_id": new_tenant.id,
+        "tenant_name": new_tenant.name,
+        "environment_type": new_tenant.environment_type,
         "is_super_admin": False
     }
 
@@ -137,11 +156,33 @@ async def login_oauth2(form_data: OAuth2PasswordRequestForm = Depends(), db: Asy
     }
     
     token = create_access_token(token_data)
+    # Fetch tenant if exists
+    tenant_name = None
+    environment_type = None
+    if user.tenant_id:
+        from app.models.tenant import Tenant
+        from sqlalchemy import select
+        stmt = select(Tenant).where(Tenant.id == user.tenant_id)
+        res = await db.execute(stmt)
+        tenant = res.scalar_one_or_none()
+        if tenant:
+            tenant_name = tenant.name
+            environment_type = tenant.environment_type
+
     return {
         "access_token": token,
         "token_type": "bearer",
         "role": user.role,
         "tenant_id": user.tenant_id,
+        "tenant_name": tenant_name,
+        "environment_type": environment_type,
         "is_super_admin": is_super
     }
+
+
+@router.post("/logout")
+async def logout():
+    """Logout endpoint. In a stateless JWT system, the client simply discards the token. 
+    This endpoint exists for API completeness or if cookie clearing/token blacklisting is added later."""
+    return {"status": "success", "detail": "Successfully logged out"}
 

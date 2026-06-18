@@ -43,3 +43,18 @@ async def create(db: AsyncSession, data: UserCreate) -> User:
     await db.refresh(user)
     return user
 
+
+async def update(db: AsyncSession, user: User, data: "UserUpdate") -> User:
+    """Update a user's profile asynchronously."""
+    if data.name is not None:
+        user.name = data.name
+    if data.email is not None:
+        user.email = data.email
+    if data.password is not None:
+        from app.core.security import hash_password
+        user.password_hash = hash_password(data.password)
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
