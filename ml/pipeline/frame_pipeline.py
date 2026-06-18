@@ -44,6 +44,7 @@ from ml.pipeline.threat_fusion import (
 )
 from ml.utils.file_utils import save_snapshot
 from ml.utils.image_utils import decode_base64_image, resize_if_needed
+from ml.utils.serialization import numpy_to_python
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,10 @@ class FramePipeline:
 
     def __init__(self, model_registry: dict):
         self.registry = model_registry
+        # Frame counter used to throttle expensive per-frame operations
+        self._frame_count: int = 0
+        # Cache last object detection result so skipped frames return stale-but-valid data
+        self._last_objects: list[dict] = []
 
     def _get_model(self, name: str):
         """Get a loaded model or return None (never raises)."""
@@ -214,6 +219,31 @@ class FramePipeline:
         return result
 
     # -----------------------------------------------------------------------
+    # Track 4: General object detection — all 80 COCO classes
+    # -----------------------------------------------------------------------
+
+    def _run_track4(
+        self,
+        frame: np.ndarray,
+    ) -> dict:
+        """Detect all objects in the frame using full COCO class set.
+
+        Runs YOLO on all 80 COCO classes (vehicles, animals, weapons,
+        everyday objects, etc.). Persons (class 0) are excluded here
+        since they are already returned by Track 2 as tracked_persons.
+        """
+        result = {"objects": []}
+
+        object_detector = self._get_model("object_detector")
+        if object_detector is None:
+            return result
+
+        # Exclude class 0 (person) — already covered by Track 2
+        detections = object_detector.detect(frame, exclude_classes=[0])
+        result["objects"] = detections
+        return result
+
+    # -----------------------------------------------------------------------
     # Main pipeline entry point
     # -----------------------------------------------------------------------
 
@@ -251,10 +281,18 @@ class FramePipeline:
         # Resize frame if too large
         frame = resize_if_needed(frame, max_width=settings.MAX_FRAME_WIDTH)
 
-        # Run all 3 tracks
+        # Run all 4 tracks
+        self._frame_count += 1
         t1 = self._run_track1(frame, mode)
         t2 = self._run_track2(frame, mode)
         t3 = self._run_track3(frame, audio_data, mode)
+        # Track 4 runs every 3rd frame — objects change slowly so reusing
+        # the previous result for 2 frames saves a full YOLO forward pass.
+        if self._frame_count % 3 == 0:
+            t4 = self._run_track4(frame)
+            self._last_objects = t4["objects"]
+        else:
+            t4 = {"objects": self._last_objects}
 
         # ── Threat fusion ────────────────────────────────────────────────
         visual_score = compute_visual_score(
@@ -284,12 +322,13 @@ class FramePipeline:
         logger.info(
             f"Frame processed | camera={camera_id} mode={mode} "
             f"faces={len(t1['faces'])} persons={len(t2['tracked_persons'])} "
-            f"behaviors={len(t2['behaviors'])} fire={t3['is_fire']} "
+            f"objects={len(t4['objects'])} behaviors={len(t2['behaviors'])} "
+            f"fire={t3['is_fire']} "
             f"threat={threat['fused_score']:.2f} ({'' if threat['is_threat'] else 'no '}alert) "
             f"in {total_ms:.0f}ms"
         )
 
-        return {
+        return numpy_to_python({
             "camera_id": camera_id,
             "timestamp": timestamp,
             "mode": mode,
@@ -304,8 +343,16 @@ class FramePipeline:
                 for e in t1["face_embeddings"]
             ],
             "emotions": t1["emotions"],
-            # Track 2
-            "tracked_persons": t2["tracked_persons"],
+            # Track 2 — strip internal numpy arrays (keypoints_xy, keypoints_conf)
+            # before serialization; they are only used by the behavior classifier.
+            "tracked_persons": [
+                {
+                    "track_id": p["track_id"],
+                    "bbox": list(p["bbox"]),
+                    "confidence": p["confidence"],
+                }
+                for p in t2["tracked_persons"]
+            ],
             "behaviors": t2["behaviors"],
             "reid_embeddings": [
                 {"track_id": r["track_id"], "embedding": r["embedding"].tolist()}
@@ -314,8 +361,10 @@ class FramePipeline:
             # Track 3
             "fire_detections": t3["fire_detections"],
             "audio_events": t3["audio_events"],
+            # Track 4 — General objects (all COCO classes except person)
+            "objects": t4["objects"],
             # Threat
             "threat": threat,
             # Evidence
             "snapshot_paths": snapshot_paths,
-        }
+        })

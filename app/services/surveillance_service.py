@@ -395,6 +395,8 @@ async def process_camera_frame(
             "fire_detections": ml_result.get("fire_detections", []),
             "behaviors": ml_result.get("behaviors", []),
             "fire_detected": is_fire,
-            "audio_events": ml_result.get("audio_events", [])
+            "audio_events": ml_result.get("audio_events", []),
+            "objects": ml_result.get("objects", []),
+            "object_count": ml_result.get("object_count", len(ml_result.get("objects", []))),
         }
     }

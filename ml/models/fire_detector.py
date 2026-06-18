@@ -94,7 +94,7 @@ class FireDetector:
                 cls_id = int(box.cls[0].cpu())
                 label = FIRE_CLASSES.get(cls_id, f"class_{cls_id}")
                 detections.append({
-                    "bbox": (x1, y1, x2, y2),
+                    "bbox": (int(x1), int(y1), int(x2), int(y2)),
                     "label": label,
                     "confidence": conf,
                 })

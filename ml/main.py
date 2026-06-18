@@ -62,6 +62,24 @@ def _load_models() -> dict:
     except Exception as e:
         logger.warning(f"Failed to load {model_name}: {e}")
 
+    # --- YOLO26 general object detection (all 80 COCO classes) ---
+    model_name = "object_detector"
+    registry[model_name] = {
+        "model": None,
+        "loaded": False,
+        "device": device,
+        "variant": settings.YOLO_DETECT_MODEL,
+    }
+    try:
+        start = time.perf_counter()
+        from ml.models.object_detector import ObjectDetector
+        model = ObjectDetector()
+        elapsed = (time.perf_counter() - start) * 1000
+        registry[model_name].update(model=model, loaded=True, load_time_ms=elapsed)
+        logger.info(f"Loaded {model_name} ({settings.YOLO_DETECT_MODEL}) on {device} in {elapsed:.0f}ms")
+    except Exception as e:
+        logger.warning(f"Failed to load {model_name}: {e}")
+
     # --- YOLO26 pose estimation (COCO-pose pretrained, auto-downloads) ---
     model_name = "pose_estimator"
     registry[model_name] = {

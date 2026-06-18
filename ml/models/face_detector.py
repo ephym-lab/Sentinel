@@ -104,11 +104,11 @@ class FaceDetector:
             boxes = results[0].boxes
             if boxes is not None and len(boxes) > 0:
                 for i in range(len(boxes)):
-                    xyxy = boxes.xyxy[i].cpu().numpy().astype(int)
+                    x1, y1, x2, y2 = boxes.xyxy[i].cpu().numpy().astype(int)
                     confidence = float(boxes.conf[i].cpu().numpy())
 
                     face = {
-                        "bbox": tuple(xyxy),
+                        "bbox": (int(x1), int(y1), int(x2), int(y2)),
                         "confidence": confidence,
                         "landmarks": None,  # YOLO26 detection doesn't output landmarks
                     }

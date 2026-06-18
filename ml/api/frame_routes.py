@@ -58,6 +58,10 @@ class PipelineResult(BaseModel):
     # Re-ID embeddings (for cross-camera matching)
     reid_embeddings: list[dict] = []
 
+    # General object detections (all 80 COCO classes, persons excluded)
+    object_count: int = 0
+    objects: list[dict] = []
+
     # Threat assessment
     threat: dict = {}
 
@@ -136,6 +140,8 @@ async def process_frame(
         fire_detections=result["fire_detections"],
         audio_events=result["audio_events"],
         reid_embeddings=result["reid_embeddings"],
+        object_count=len(result.get("objects", [])),
+        objects=result.get("objects", []),
         threat=result["threat"],
         snapshot_paths=result["snapshot_paths"],
     )

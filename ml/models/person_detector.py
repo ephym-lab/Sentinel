@@ -86,7 +86,7 @@ class PersonDetector:
                 cls = int(box.cls[0].cpu())
                 if cls == PERSON_CLASS_ID:
                     detections.append({
-                        "bbox": (x1, y1, x2, y2),
+                        "bbox": (int(x1), int(y1), int(x2), int(y2)),
                         "confidence": conf,
                         "class_id": cls,
                     })
@@ -147,7 +147,7 @@ class PersonDetector:
                 conf = float(box.conf[0].cpu())
                 tracks.append({
                     "track_id": int(track_id.cpu()),
-                    "bbox": (x1, y1, x2, y2),
+                    "bbox": (int(x1), int(y1), int(x2), int(y2)),
                     "confidence": conf,
                     "class_id": cls,
                 })

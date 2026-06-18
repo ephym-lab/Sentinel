@@ -121,7 +121,7 @@ class PoseEstimator:
                 ]
 
                 persons.append({
-                    "bbox": (x1, y1, x2, y2),
+                    "bbox": (int(x1), int(y1), int(x2), int(y2)),
                     "confidence": conf,
                     "keypoints": keypoints,
                     "keypoints_xy": xy,
@@ -196,7 +196,7 @@ class PoseEstimator:
 
                 persons.append({
                     "track_id": track_id,
-                    "bbox": (x1, y1, x2, y2),
+                    "bbox": (int(x1), int(y1), int(x2), int(y2)),
                     "confidence": conf,
                     "keypoints": keypoints,
                     "keypoints_xy": xy,
