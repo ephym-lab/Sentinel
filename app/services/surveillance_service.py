@@ -133,7 +133,8 @@ async def process_camera_frame(
     tenant_id: str,
     camera_id: str,
     image_b64: str,
-    audio_b64: Optional[str] = None
+    audio_b64: Optional[str] = None,
+    analysis_mode: str = "full",
 ) -> dict:
     """Full async frame processing pipeline orchestration."""
     try:
@@ -160,7 +161,8 @@ async def process_camera_frame(
         camera_id=camera_id,
         mode=tenant.mode,
         tenant_id=tenant_id,
-        audio_b64=audio_b64
+        audio_b64=audio_b64,
+        analysis_mode=analysis_mode,
     )
     
     if not ml_result:
@@ -390,6 +392,7 @@ async def process_camera_frame(
         } if incident_record else None,
         "ml_raw_metrics": {
             "faces_count": len(ml_result.get("faces", [])),
+            "faces": ml_result.get("faces", []),
             "persons_count": len(ml_result.get("tracked_persons", [])),
             "tracked_persons": ml_result.get("tracked_persons", []),
             "fire_detections": ml_result.get("fire_detections", []),
@@ -398,5 +401,6 @@ async def process_camera_frame(
             "audio_events": ml_result.get("audio_events", []),
             "objects": ml_result.get("objects", []),
             "object_count": ml_result.get("object_count", len(ml_result.get("objects", []))),
+            "analysis_mode": ml_result.get("analysis_mode", analysis_mode),
         }
     }

@@ -18,6 +18,27 @@ class DeploymentMode(str, Enum):
     SUPERMARKET = "supermarket"
 
 
+class AnalysisMode(str, Enum):
+    """Selects which ML tracks to run per frame.
+
+    Focused modes skip unused models so inference is faster:
+      full    → all 4 tracks (default, existing behaviour)
+      face    → Track 1 only: face detection + ArcFace embeddings
+      person  → Track 2 only: ByteTrack person tracking
+      pose    → Track 2 with pose keypoints + behaviour classifier
+      fire    → Track 3: fire/smoke YOLO detection
+      objects → Track 4: all-class COCO object detection
+      audio   → Track 3 audio branch: YAMNet classification only
+    """
+    FULL    = "full"
+    FACE    = "face"
+    PERSON  = "person"
+    POSE    = "pose"
+    FIRE    = "fire"
+    OBJECTS = "objects"
+    AUDIO   = "audio"
+
+
 class FrameInput(BaseModel):
     """Input for the main /process-frame pipeline endpoint."""
 
@@ -28,6 +49,7 @@ class FrameInput(BaseModel):
     timestamp: str | None = Field(None, description="ISO 8601 timestamp of frame capture")
     include_audio: bool = Field(False, description="Whether audio data is included for fusion")
     audio_b64: str | None = Field(None, description="Base64-encoded WAV audio (16kHz mono) — used when include_audio=True")
+    analysis_mode: AnalysisMode = Field(AnalysisMode.FULL, description="Which detector tracks to run")
 
 
 class FaceDetectRequest(BaseModel):
@@ -92,5 +114,3 @@ class PoseEstimateRequest(BaseModel):
     """Input for /estimate-pose — single-frame pose estimation."""
 
     image_b64: str = Field(..., description="Base64-encoded image (JPEG or PNG)")
-
-

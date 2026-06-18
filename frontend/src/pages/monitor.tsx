@@ -37,6 +37,7 @@ export default function MonitorPage() {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [showYoloOverlay, setShowYoloOverlay] = useState(true);
   const [activeDetections, setActiveDetections] = useState<any>(null);
+  const [analysisMode, setAnalysisMode] = useState<string>("full");
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -189,6 +190,7 @@ export default function MonitorPage() {
           const response = await api.post("/surveillance/process-frame", {
             camera_id: selectedCamera.id,
             image_b64: base64,
+            analysis_mode: analysisMode,
           });
 
           if (isSubscribed && response.data?.ml_raw_metrics) {
@@ -199,8 +201,18 @@ export default function MonitorPage() {
               addTerminalLog(`[ALERT] YOLO verified fire signature in camera stream!`);
             } else if (metrics.persons_count > 0) {
               addTerminalLog(`[YOLO] Detected ${metrics.persons_count} person(s) on-screen.`);
+            } else if ((metrics.faces || []).length > 0) {
+              addTerminalLog(`[YOLO] Detected ${metrics.faces.length} face(s) on-screen.`);
+            }
+
+            // Log security-relevant objects
+            const securityObjects = (metrics.objects || []).filter((o: any) => o.is_security_relevant);
+            if (securityObjects.length > 0) {
+              const labels = securityObjects.map((o: any) => `${o.label} (${Math.round(o.confidence * 100)}%)`).join(", ");
+              addTerminalLog(`[YOLO] Objects detected: ${labels}`);
             }
           }
+
         }
       } catch (err) {
         console.error("Surveillance frame processing failed:", err);
@@ -264,7 +276,61 @@ export default function MonitorPage() {
       const scaleY = displayHeight / 360;
 
       if (activeDetections) {
-        // Draw Tracked Persons
+          // ── Face Detections (Track 1) ──────────────────────────────────
+          const faces = activeDetections.faces || [];
+          faces.forEach((face: any) => {
+            const [x1, y1, x2, y2] = face.bbox;
+            const x = offsetX + x1 * scaleX;
+            const y = offsetY + y1 * scaleY;
+            const w = (x2 - x1) * scaleX;
+            const h = (y2 - y1) * scaleY;
+            const color = "#06b6d4"; // Cyan — distinct from persons (green)
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([2, 2]);
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = color;
+            ctx.font = "9px monospace";
+            const conf = Math.round(face.confidence * 100);
+            const labelText = `Face ${conf}%`;
+            const tw = ctx.measureText(labelText).width;
+            ctx.fillRect(x - 1, y - 12, tw + 6, 12);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(labelText, x + 2, y - 3);
+          });
+
+          // ── General Objects (Track 4) ─────────────────────────────────
+          const objects = activeDetections.objects || [];
+          objects.forEach((obj: any) => {
+            const [x1, y1, x2, y2] = obj.bbox;
+            const x = offsetX + x1 * scaleX;
+            const y = offsetY + y1 * scaleY;
+            const w = (x2 - x1) * scaleX;
+            const h = (y2 - y1) * scaleY;
+            // Security-relevant → amber; everything else → slate-blue
+            const color = obj.is_security_relevant ? "#f59e0b" : "#6366f1";
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]); // dashed to distinguish from solid person boxes
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+
+            // Label badge
+            const conf = Math.round(obj.confidence * 100);
+            const labelText = `${obj.label} ${conf}%`;
+            ctx.font = "9px monospace";
+            const textWidth = ctx.measureText(labelText).width;
+            ctx.fillStyle = color;
+            ctx.fillRect(x - 1, y - 12, textWidth + 6, 12);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(labelText, x + 2, y - 3);
+          });
+
+          // ── Tracked Persons (Track 2) ─────────────────────────────────
         const persons = activeDetections.tracked_persons || [];
         persons.forEach((person: any) => {
           const [x1, y1, x2, y2] = person.bbox;
@@ -300,7 +366,7 @@ export default function MonitorPage() {
           ctx.fillText(labelText, x + 2, y - 3);
         });
 
-        // Draw Fire Detections
+        // ── Fire Detections (Track 3) ─────────────────────────────────
         const fireDetections = activeDetections.fire_detections || [];
         fireDetections.forEach((fire: any) => {
           const [x1, y1, x2, y2] = fire.bbox;
@@ -335,6 +401,7 @@ export default function MonitorPage() {
         });
       }
 
+
       animationId = requestAnimationFrame(draw);
     };
 
@@ -366,7 +433,29 @@ export default function MonitorPage() {
         </div>
 
         {/* Control Badges */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Analysis Mode Selector */}
+          <div className="flex items-center gap-1 bg-slate-900/60 border border-slate-800 rounded-lg p-1">
+            {(["full", "face", "person", "fire", "objects"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setAnalysisMode(m);
+                  setActiveDetections(null);
+                  addTerminalLog(`[MODE] Analysis switched to: ${m.toUpperCase()}`);
+                }}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-bold capitalize transition-all ${
+                  analysisMode === m
+                    ? "bg-rose-500 text-white shadow"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                }`}
+                title={`Run ${m} detection only`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+
           {/* YOLO Overlay Toggle Button */}
           <button 
             onClick={() => {

@@ -31,7 +31,8 @@ class MLServiceClient:
         mode: str,
         tenant_id: str,
         audio_b64: Optional[str] = None,
-        timestamp: Optional[str] = None
+        timestamp: Optional[str] = None,
+        analysis_mode: str = "full",
     ) -> Optional[dict]:
         """Post a camera frame and optional audio to the ML pipeline.
 
@@ -51,6 +52,7 @@ class MLServiceClient:
             "camera_id": str(camera_id),
             "mode": mode,
             "tenant_id": str(tenant_id),
+            "analysis_mode": analysis_mode,
         }
         if audio_b64:
             payload["audio_b64"] = audio_b64

@@ -71,3 +71,6 @@ Thumbs.db
 models/
 *.md
 *.db
+app/*.db
+app/*.pyc
+app/*.pyc

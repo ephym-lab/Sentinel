@@ -28,7 +28,8 @@ async def process_frame(
             tenant_id=tenant_id,
             camera_id=request.camera_id,
             image_b64=request.image_b64,
-            audio_b64=request.audio_b64
+            audio_b64=request.audio_b64,
+            analysis_mode=request.analysis_mode,
         )
         return result
     except ValueError as e:

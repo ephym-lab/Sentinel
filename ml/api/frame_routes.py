@@ -2,19 +2,20 @@
 Frame processing pipeline API route.
 
 Endpoint:
-- POST /pipeline/process-frame — process a full camera frame through all ML models
+- POST /pipeline/process-frame — process a full camera frame through selected ML models
 
 This is the primary endpoint called by the backend for every camera frame.
-It runs all 3 pipeline tracks and returns a complete FrameProcessingResult.
+Supports analysis_mode to run only specific detector tracks for lower latency.
 """
 
 import base64
 import logging
 import time
-
 import uuid
+from collections import defaultdict
+
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from ml.pipeline.frame_pipeline import FramePipeline
 from ml.schemas.requests import FrameInput
@@ -29,13 +30,14 @@ class PipelineResult(BaseModel):
     """Simplified pipeline response sent to backend."""
 
     camera_id: uuid.UUID
-
     timestamp: str
     mode: str
+    analysis_mode: str = "full"
     inference_time_ms: float
 
-    # Detected faces with embeddings
+    # Detected faces with bboxes (for canvas overlay)
     face_count: int = 0
+    faces: list[dict] = []
     face_embeddings: list[dict] = []
 
     # Tracked persons
@@ -74,24 +76,17 @@ async def process_frame(
     request: FrameInput,
     fastapi_request: Request,
 ) -> PipelineResult:
-    """Process a camera frame through all active Sentinel ML models.
+    """Process a camera frame through selected Sentinel ML models.
 
-    This is the core endpoint called by the backend service for every
-    camera frame. Returns a complete analysis including:
-    - Detected faces and their embeddings (for DB matching)
-    - Tracked persons with persistent IDs (for incident tracking)
-    - Behavioral events with severity levels
-    - Fire/smoke detections (triggers evacuation alerts)
-    - Threat assessment (fused score + is_threat flag)
-
-    The backend uses is_threat=True to:
-    - Create incident records in PostgreSQL
-    - Dispatch WebSocket alerts to staff dashboards
-    - Send push notifications to parents (school mode)
-    - Trigger re-ID cross-camera search (mall mode)
+    Returns a complete analysis based on analysis_mode:
+      full    → faces, persons, fire, objects, behaviors, threat
+      face    → face bboxes + ArcFace embeddings only
+      person  → person tracking only
+      pose    → person tracking + pose keypoints + behaviors
+      fire    → fire/smoke detection only
+      objects → all-class COCO object detection only
+      audio   → audio event classification only
     """
-    start = time.perf_counter()
-
     # Decode image
     try:
         frame = decode_base64_image(request.image_b64)
@@ -106,20 +101,28 @@ async def process_frame(
         except Exception:
             logger.warning("Failed to decode audio data — processing frame without audio")
 
-    # Get model registry from app.state
+    # Get or create a persistent FramePipeline (stored once per app lifetime)
     registry = fastapi_request.app.state.model_registry
-    pipeline = FramePipeline(registry)
+    if not hasattr(fastapi_request.app.state, "pipeline"):
+        fastapi_request.app.state.pipeline = FramePipeline(registry)
+        fastapi_request.app.state.camera_frame_counts = defaultdict(int)
 
-    # Run pipeline (CPU-bound — runs synchronously in this thread)
-    # For GPU deployments, wrap in asyncio.get_event_loop().run_in_executor()
+    pipeline = fastapi_request.app.state.pipeline
+    camera_key = str(request.camera_id)
+    fastapi_request.app.state.camera_frame_counts[camera_key] += 1
+    frame_count = fastapi_request.app.state.camera_frame_counts[camera_key]
+
+    # Run pipeline
     try:
         result = pipeline.process(
             frame=frame,
-            camera_id=request.camera_id,
+            camera_id=str(request.camera_id),
             mode=request.mode.value,
-            tenant_id=request.tenant_id,
+            tenant_id=str(request.tenant_id),
             audio_data=audio_data,
             timestamp=request.timestamp,
+            analysis_mode=request.analysis_mode.value,
+            frame_count=frame_count,
         )
     except Exception as e:
         logger.error(f"Pipeline failed for camera {request.camera_id}: {e}", exc_info=True)
@@ -129,8 +132,10 @@ async def process_frame(
         camera_id=result["camera_id"],
         timestamp=result["timestamp"],
         mode=result["mode"],
+        analysis_mode=result.get("analysis_mode", "full"),
         inference_time_ms=result["inference_time_ms"],
         face_count=len(result["faces"]),
+        faces=result["faces"],
         face_embeddings=result["face_embeddings"],
         person_count=len(result["tracked_persons"]),
         tracked_persons=result["tracked_persons"],
