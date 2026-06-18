@@ -15,6 +15,14 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    tenant_name: str
+    environment_type: str  # e.g., 'mall', 'school', 'supermarket'
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
@@ -49,6 +57,63 @@ async def login_json(data: LoginRequest, db: AsyncSession = Depends(get_session)
         "role": user.role,
         "tenant_id": user.tenant_id,
         "is_super_admin": is_super
+    }
+
+
+@router.post("/register", response_model=TokenResponse)
+async def register_tenant(data: RegisterRequest, db: AsyncSession = Depends(get_session)):
+    """Register a new tenant organization and the initial admin user."""
+    # Check if email is taken
+    existing_user = await user_repository.get_by_email(db, data.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    from app.models.tenant import Tenant
+    from app.schemas.user import UserCreate
+
+    # 1. Create Tenant
+    # Generate a simple schema name based on tenant name
+    schema_name = f"tenant_{uuid.uuid4().hex[:8]}"
+    new_tenant = Tenant(
+        name=data.tenant_name,
+        schema_name=schema_name,
+        environment_type=data.environment_type,
+        status="active"
+    )
+    db.add(new_tenant)
+    await db.flush() # flush to get the new_tenant.id
+
+    # 2. Create Admin User for this tenant
+    user_create = UserCreate(
+        name=data.name,
+        email=data.email,
+        password=data.password,
+        role="admin",
+        tenant_id=new_tenant.id
+    )
+    new_user = await user_repository.create(db, user_create)
+
+    # Note: In a real production PostgreSQL setup, we would also execute:
+    # await db.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name};"))
+    # and run alembic migrations against that schema. Since we are focusing on
+    # local SQLite for now, SQLite creates tables in the main schema, which is fine for UI testing.
+
+    # 3. Log them in automatically
+    token_data = {
+        "sub": str(new_user.id),
+        "email": new_user.email,
+        "role": new_user.role,
+        "is_super_admin": False,
+        "tenant_id": str(new_tenant.id)
+    }
+    token = create_access_token(token_data)
+    
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": new_user.role,
+        "tenant_id": new_tenant.id,
+        "is_super_admin": False
     }
 
 

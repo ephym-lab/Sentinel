@@ -39,9 +39,19 @@ export default function MonitorPage() {
   const [activeDetections, setActiveDetections] = useState<any>(null);
   const [analysisMode, setAnalysisMode] = useState<string>("full");
   
+  // Zoom & Pan State
+  const [isPaused, setIsPaused] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [manualAnalysisResult, setManualAnalysisResult] = useState<any>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   const { data: cameras = [], isLoading } = useQuery<Camera[]>({
     queryKey: ["cameras"],
@@ -57,6 +67,88 @@ export default function MonitorPage() {
       setSelectedCamera(cameras[0]);
     }
   }, [cameras, selectedCamera]);
+
+  // Video Controls
+  const togglePause = () => {
+    if (videoRef.current) {
+      if (isPaused) {
+        videoRef.current.play();
+        setManualAnalysisResult(null); // Clear manual analysis on play
+      } else {
+        videoRef.current.pause();
+      }
+      setIsPaused(!isPaused);
+      addTerminalLog(`Video playback ${!isPaused ? 'PAUSED' : 'RESUMED'}`);
+    }
+  };
+
+  // Zoom handling (Simple scroll to zoom)
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!videoRef.current) return;
+    const zoomSensitivity = 0.005;
+    let newZoom = zoom - e.deltaY * zoomSensitivity;
+    newZoom = Math.max(1, Math.min(newZoom, 8)); // Clamp between 1x and 8x
+    setZoom(newZoom);
+    if (newZoom === 1) setPan({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoom > 1) {
+      e.preventDefault(); // Prevent native HTML5 video element drag
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoom > 1) {
+      setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+    }
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  // Manual Frame Analysis
+  const performManualAnalysis = async () => {
+    const video = videoRef.current;
+    if (!video || !selectedCamera) return;
+
+    setIsAnalyzing(true);
+    addTerminalLog(`[MANUAL] Initiating high-res analysis on current frame...`);
+
+    try {
+      const canvas = document.createElement("canvas");
+      // Use native video resolution for detailed manual analysis
+      canvas.width = video.videoWidth || 1920;
+      canvas.height = video.videoHeight || 1080;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        const base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
+
+        const response = await api.post("/surveillance/process-frame", {
+          camera_id: selectedCamera.id,
+          image_b64: base64,
+          analysis_mode: analysisMode,
+        });
+
+        if (response.data?.ml_raw_metrics) {
+           setManualAnalysisResult(response.data);
+           setActiveDetections(response.data.ml_raw_metrics); // Overlay on canvas
+           addTerminalLog(`[MANUAL] Analysis complete in ${response.data.inference_time_ms}ms.`);
+           
+           const m = response.data.ml_raw_metrics;
+           addTerminalLog(`[MANUAL] Found: ${m.faces_count} faces, ${m.persons_count} persons, ${m.object_count} objects.`);
+        }
+      }
+    } catch (err) {
+       console.error("Manual analysis failed:", err);
+       addTerminalLog(`[ERROR] Manual analysis failed.`);
+    } finally {
+       setIsAnalyzing(false);
+    }
+  };
 
   // 2. WebSocket Stream Integration
   const { isConnected, subscribe } = useEventStream();
@@ -576,23 +668,98 @@ export default function MonitorPage() {
           {/* Main player viewport */}
           <div className="flex-1 bg-slate-950 border border-slate-800/80 rounded-2xl relative overflow-hidden flex items-center justify-center min-h-[300px]">
             {selectedCamera?.active_feed?.file_path ? (
-              <div className="relative w-full h-full flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  src={`${API_BASE_URL}/static/${selectedCamera.active_feed.file_path}`}
-                  crossOrigin="anonymous"
-                  controls
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="w-full h-full object-contain"
-                />
-                {showYoloOverlay && (
-                  <canvas
-                    ref={canvasRef}
-                    className="absolute top-0 left-0 w-full h-full pointer-events-none z-10"
+              <div 
+                ref={viewportRef}
+                className={`relative w-full h-full flex items-center justify-center overflow-hidden ${zoom === 1 ? 'cursor-zoom-in' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <div 
+                  className="relative w-full h-full flex items-center justify-center transition-transform duration-75 origin-center"
+                  style={{
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  }}
+                >
+                  <video
+                    ref={videoRef}
+                    src={`${API_BASE_URL}/static/${selectedCamera.active_feed.file_path}`}
+                    crossOrigin="anonymous"
+                    controls
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-full object-contain"
                   />
+                  {/* Drag/Pan Overlay to catch mouse events smoothly when zoomed */}
+                  {zoom > 1 && (
+                    <div className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing" />
+                  )}
+                  {showYoloOverlay && (
+                    <canvas
+                      ref={canvasRef}
+                      className="absolute top-0 left-0 w-full h-full pointer-events-none z-20"
+                    />
+                  )}
+                </div>
+
+                {/* Overlay Controls */}
+                <div className="absolute bottom-4 right-4 flex items-center gap-2 z-20">
+                  <div className="bg-black/60 backdrop-blur rounded-lg border border-white/10 p-1 flex items-center gap-1 text-slate-300">
+                    <button 
+                      onClick={togglePause}
+                      className="p-2 hover:bg-white/10 rounded-md transition-colors"
+                      title={isPaused ? "Play" : "Pause"}
+                    >
+                      {isPaused ? (
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                      )}
+                    </button>
+                    
+                    <div className="w-px h-4 bg-white/20 mx-1"></div>
+                    
+                    <button 
+                      onClick={() => { setZoom(1); setPan({x:0, y:0}); }}
+                      className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${zoom > 1 ? 'hover:bg-white/10 text-emerald-400' : 'text-slate-500 cursor-default'}`}
+                      disabled={zoom === 1}
+                      title="Reset Zoom"
+                    >
+                      {zoom.toFixed(1)}x
+                    </button>
+
+                    {isPaused && (
+                      <>
+                        <div className="w-px h-4 bg-white/20 mx-1"></div>
+                        <button
+                          onClick={performManualAnalysis}
+                          disabled={isAnalyzing}
+                          className="px-3 py-1 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-md text-xs font-bold transition-colors flex items-center gap-1"
+                        >
+                          {isAnalyzing ? "Analyzing..." : "Analyze Frame"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {manualAnalysisResult && isPaused && (
+                  <div className="absolute top-4 right-4 bg-black/80 backdrop-blur rounded-lg border border-white/10 p-3 max-w-xs z-20 shadow-xl overflow-hidden pointer-events-none">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
+                      <span className="text-xs font-bold text-slate-200">Manual Analysis</span>
+                    </div>
+                    <div className="space-y-1 text-[10px] text-slate-300">
+                      <div className="flex justify-between gap-4"><span>Faces:</span> <span className="font-bold text-cyan-400">{manualAnalysisResult.ml_raw_metrics?.faces_count || 0}</span></div>
+                      <div className="flex justify-between gap-4"><span>Persons:</span> <span className="font-bold text-emerald-400">{manualAnalysisResult.ml_raw_metrics?.persons_count || 0}</span></div>
+                      <div className="flex justify-between gap-4"><span>Objects:</span> <span className="font-bold text-indigo-400">{manualAnalysisResult.ml_raw_metrics?.object_count || 0}</span></div>
+                      <div className="flex justify-between gap-4"><span>Fire/Smoke:</span> <span className="font-bold text-rose-400">{manualAnalysisResult.ml_raw_metrics?.fire_detected ? "Yes" : "No"}</span></div>
+                      <div className="flex justify-between gap-4"><span>Threat Score:</span> <span className="font-bold text-amber-400">{(manualAnalysisResult.threat_score || 0).toFixed(2)}</span></div>
+                    </div>
+                  </div>
                 )}
               </div>
             ) : selectedCamera ? (
