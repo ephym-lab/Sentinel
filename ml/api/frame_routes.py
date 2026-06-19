@@ -108,9 +108,9 @@ async def process_frame(
         fastapi_request.app.state.camera_frame_counts = defaultdict(int)
 
     pipeline = fastapi_request.app.state.pipeline
-    camera_key = str(request.camera_id)
-    fastapi_request.app.state.camera_frame_counts[camera_key] += 1
-    frame_count = fastapi_request.app.state.camera_frame_counts[camera_key]
+    # For manual frame analysis via this route, always force frame_count=0 
+    # to ensure Track 4 (objects) runs and is not throttled.
+    frame_count = 0
 
     # Run pipeline
     try:
