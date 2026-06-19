@@ -53,6 +53,7 @@ export default function MonitorPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamImgRef = useRef<HTMLImageElement>(null);
+  const frozenImgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -134,24 +135,54 @@ export default function MonitorPage() {
     if (!selectedCamera) return;
 
     setIsAnalyzing(true);
-    addTerminalLog(`[MANUAL] Initiating high-res analysis on current frame...`);
+    addTerminalLog(`[MANUAL] Initiating targeted analysis on visible region...`);
 
     try {
       let base64 = "";
-
-      if (showYoloOverlay && frozenFrameData) {
-         base64 = frozenFrameData.substring(frozenFrameData.indexOf(",") + 1);
+      
+      let sourceElement: HTMLImageElement | HTMLVideoElement | null = null;
+      if (showYoloOverlay && frozenFrameData && frozenImgRef.current) {
+        sourceElement = frozenImgRef.current;
       } else if (videoRef.current) {
-         const video = videoRef.current;
-         const canvas = document.createElement("canvas");
-         canvas.width = video.videoWidth || 1920;
-         canvas.height = video.videoHeight || 1080;
-         const ctx = canvas.getContext("2d");
-         if (ctx) {
-           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-           const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-           base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
-         }
+        sourceElement = videoRef.current;
+      }
+
+      if (sourceElement && viewportRef.current) {
+        const viewport = viewportRef.current;
+        const vw = viewport.clientWidth;
+        const vh = viewport.clientHeight;
+        
+        const canvas = document.createElement("canvas");
+        const resMultiplier = 2; // Output at double viewport resolution for ML detail
+        canvas.width = vw * resMultiplier;
+        canvas.height = vh * resMultiplier;
+        const ctx = canvas.getContext("2d");
+        
+        if (ctx) {
+          ctx.scale(resMultiplier, resMultiplier);
+          
+          // Replicate CSS transform on the Canvas
+          ctx.translate(vw / 2, vh / 2);
+          ctx.translate(pan.x, pan.y);
+          ctx.scale(zoom, zoom);
+          ctx.translate(-vw / 2, -vh / 2);
+          
+          // Object-contain rendering logic
+          const nw = sourceElement instanceof HTMLVideoElement ? sourceElement.videoWidth : sourceElement.naturalWidth;
+          const nh = sourceElement instanceof HTMLVideoElement ? sourceElement.videoHeight : sourceElement.naturalHeight;
+          
+          const fitScale = Math.min(vw / nw, vh / nh);
+          const dw = nw * fitScale;
+          const dh = nh * fitScale;
+          const ix = (vw - dw) / 2;
+          const iy = (vh - dh) / 2;
+          
+          // Draw the full image; the canvas will physically clip to the viewport
+          ctx.drawImage(sourceElement, 0, 0, nw, nh, ix, iy, dw, dh);
+          
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+          base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
+        }
       }
 
       if (base64) {
@@ -470,7 +501,9 @@ export default function MonitorPage() {
                   {showYoloOverlay && tenant?.id ? (
                     frozenFrameData ? (
                       <img
+                        ref={frozenImgRef}
                         src={frozenFrameData}
+                        draggable={false}
                         className="w-full h-full object-contain pointer-events-none"
                         alt="Frozen Video Stream"
                       />
@@ -479,6 +512,7 @@ export default function MonitorPage() {
                         ref={streamImgRef}
                         src={`${API_BASE_URL.replace("8000", "8001")}/stream?camera_id=${selectedCamera.id}&file_path=${encodeURIComponent(selectedCamera.active_feed.file_path)}&mode=${tenant.mode}&tenant_id=${tenant.id}&analysis_mode=${analysisMode}`}
                         crossOrigin="anonymous"
+                        draggable={false}
                         className="w-full h-full object-contain pointer-events-none"
                         alt="Processed Video Stream"
                       />
