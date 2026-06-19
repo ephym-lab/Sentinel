@@ -77,8 +77,9 @@ class MLSettings(BaseSettings):
         return folder
 
     def tenant_dir(self, tenant_id: str, sub: str) -> Path:
-        """Return and auto-create uploads/tenants/{tenant_id}/{sub}/"""
-        path = Path(self.UPLOADS_DIR) / "tenants" / tenant_id / sub
+        """Return and auto-create uploads/tenants/tenant_{tenant_id}/{sub}/"""
+        folder_name = f"tenant_{tenant_id}"
+        path = Path(self.UPLOADS_DIR) / "tenants" / folder_name / sub
         path.mkdir(parents=True, exist_ok=True)
         return path
 
