@@ -456,6 +456,44 @@ export default function MonitorPage() {
           ctx.fillRect(x - 1, y - 12, textWidth + 6, 12);
           ctx.fillStyle = "#ffffff";
           ctx.fillText(labelText, x + 2, y - 3);
+
+          // Draw skeletal keypoints if available
+          const keypoints = person.keypoints || [];
+          if (keypoints.length === 17) {
+            // Draw skeleton lines (standard COCO connections)
+            const connections = [
+              [0, 1], [0, 2], [1, 3], [2, 4], // Head
+              [5, 6], [5, 7], [7, 9], [6, 8], [8, 10], // Arms and Shoulders
+              [5, 11], [6, 12], [11, 12], // Torso
+              [11, 13], [13, 15], [12, 14], [14, 16] // Legs
+            ];
+            
+            ctx.strokeStyle = "rgba(251, 191, 36, 0.7)"; // Amber
+            ctx.lineWidth = 1.5;
+            
+            connections.forEach(([i, j]) => {
+              const kp1 = keypoints[i];
+              const kp2 = keypoints[j];
+              if (kp1 && kp2 && kp1.confidence > 0.4 && kp2.confidence > 0.4) {
+                ctx.beginPath();
+                ctx.moveTo(offsetX + kp1.x * scaleX, offsetY + kp1.y * scaleY);
+                ctx.lineTo(offsetX + kp2.x * scaleX, offsetY + kp2.y * scaleY);
+                ctx.stroke();
+              }
+            });
+
+            // Draw individual joints
+            ctx.fillStyle = "#fbbf24"; 
+            keypoints.forEach((kp: any) => {
+              if (kp.confidence > 0.4) {
+                const kx = offsetX + kp.x * scaleX;
+                const ky = offsetY + kp.y * scaleY;
+                ctx.beginPath();
+                ctx.arc(kx, ky, 2.5, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+            });
+          }
         });
 
         // ── Fire Detections (Track 3) ─────────────────────────────────
@@ -528,7 +566,7 @@ export default function MonitorPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {/* Analysis Mode Selector */}
           <div className="flex items-center gap-1 bg-slate-900/60 border border-slate-800 rounded-lg p-1">
-            {(["full", "face", "person", "fire", "objects"] as const).map((m) => (
+            {(["full", "face", "person", "pose", "fire", "objects", "emotion", "behaviour"] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => {

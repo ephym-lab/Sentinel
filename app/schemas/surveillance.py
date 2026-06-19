@@ -1,7 +1,7 @@
 from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
-AnalysisMode = Literal["full", "face", "person", "pose", "fire", "objects", "audio"]
+AnalysisMode = Literal["full", "face", "person", "pose", "fire", "objects", "audio", "emotion", "behavior", "behaviour"]
 
 
 class FrameUploadRequest(BaseModel):

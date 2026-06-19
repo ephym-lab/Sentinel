@@ -37,7 +37,9 @@ class AnalysisMode(str, Enum):
     FIRE    = "fire"
     OBJECTS = "objects"
     AUDIO   = "audio"
-
+    EMOTION = "emotion"
+    BEHAVIOR = "behavior"
+    BEHAVIOUR = "behaviour"
 
 class FrameInput(BaseModel):
     """Input for the main /process-frame pipeline endpoint."""

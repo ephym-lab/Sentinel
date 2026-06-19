@@ -84,6 +84,7 @@ class FramePipeline:
         self,
         frame: np.ndarray,
         mode: str,
+        analysis_mode: str = "full",
     ) -> dict:
         """Face detection + recognition + embedding extraction."""
         result = {"faces": [], "face_embeddings": [], "emotions": []}
@@ -120,8 +121,8 @@ class FramePipeline:
                         "embedding": embedding,
                     })
 
-            # Emotion (supermarket + school modes)
-            if emotion_clf and mode in ("supermarket", "school"):
+            # Emotion (supermarket + school modes, or explicitly requested)
+            if emotion_clf and (mode in ("supermarket", "school") or analysis_mode == "emotion"):
                 emotion = emotion_clf.classify(face_crop)
                 if emotion:
                     result["emotions"].append({
@@ -155,7 +156,12 @@ class FramePipeline:
             raw_persons = pose_estimator.estimate_tracked(frame)
             result["poses"] = raw_persons
             result["tracked_persons"] = [
-                {"track_id": p["track_id"], "bbox": p["bbox"], "confidence": p["confidence"]}
+                {
+                    "track_id": p["track_id"], 
+                    "bbox": p["bbox"], 
+                    "confidence": p["confidence"],
+                    "keypoints": p.get("keypoints", [])
+                }
                 for p in raw_persons
             ]
         elif person_detector:
@@ -200,6 +206,7 @@ class FramePipeline:
         frame: np.ndarray,
         audio_data: Optional[bytes],
         mode: str,
+        analysis_mode: str = "full",
     ) -> dict:
         """Fire/smoke detection + audio event classification."""
         result = {"fire_detections": [], "audio_events": [], "is_fire": False}
@@ -207,8 +214,8 @@ class FramePipeline:
         fire_detector = self._get_model("fire_detector")
         audio_clf = self._get_model("audio_classifier")
 
-        # Fire detection (school + mall modes)
-        if fire_detector and mode in ("school", "mall"):
+        # Fire detection (run for all modes, or if explicitly requested)
+        if fire_detector and (mode in ("school", "mall", "supermarket") or analysis_mode == "fire"):
             raw_fire = fire_detector.detect(frame)
             result["fire_detections"] = raw_fire
             result["is_fire"] = fire_detector.is_fire_emergency(raw_fire)
@@ -300,18 +307,18 @@ class FramePipeline:
         _empty_t3 = {"fire_detections": [], "audio_events": [], "is_fire": False}
         _empty_t4 = {"objects": []}
 
-        if analysis_mode == "face":
-            t1 = self._run_track1(frame, mode)
+        if analysis_mode in ("face", "emotion"):
+            t1 = self._run_track1(frame, mode, analysis_mode)
             t2, t3, t4 = _empty_t2, _empty_t3, _empty_t4
 
-        elif analysis_mode in ("person", "pose"):
+        elif analysis_mode in ("person", "pose", "behavior", "behaviour"):
             t1 = _empty_t1
             t2 = self._run_track2(frame, mode)
             t3, t4 = _empty_t3, _empty_t4
 
         elif analysis_mode == "fire":
             t1, t2 = _empty_t1, _empty_t2
-            t3 = self._run_track3(frame, audio_data, mode)
+            t3 = self._run_track3(frame, audio_data, mode, analysis_mode)
             t4 = _empty_t4
 
         elif analysis_mode == "objects":
@@ -320,15 +327,15 @@ class FramePipeline:
 
         elif analysis_mode == "audio":
             t1, t2 = _empty_t1, _empty_t2
-            t3 = self._run_track3(frame, audio_data, mode)
+            t3 = self._run_track3(frame, audio_data, mode, analysis_mode)
             t3["fire_detections"] = []  # suppress fire output for audio-only mode
             t4 = _empty_t4
 
         else:
             # "full" — all 4 tracks; Track 4 throttled every 3rd frame
-            t1 = self._run_track1(frame, mode)
+            t1 = self._run_track1(frame, mode, analysis_mode)
             t2 = self._run_track2(frame, mode)
-            t3 = self._run_track3(frame, audio_data, mode)
+            t3 = self._run_track3(frame, audio_data, mode, analysis_mode)
             if frame_count % 3 == 0:
                 t4 = self._run_track4(frame)
                 self._last_objects = t4["objects"]
