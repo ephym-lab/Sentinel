@@ -68,7 +68,7 @@ async def video_stream_generator(request: Request, camera_id: str, file_path: st
                 # Run inference (pass None for audio, and frame count for tracking)
                 # Yield control to event loop so we don't block other streams
                 await asyncio.sleep(0)
-                cached_result = pipeline.process(
+                cached_result = await pipeline.process(
                     frame=frame.copy(),
                     camera_id=camera_id,
                     mode=mode,

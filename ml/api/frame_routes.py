@@ -114,7 +114,7 @@ async def process_frame(
 
     # Run pipeline
     try:
-        result = pipeline.process(
+        result = await pipeline.process(
             frame=frame,
             camera_id=str(request.camera_id),
             mode=request.mode.value,

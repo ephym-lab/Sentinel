@@ -161,7 +161,15 @@ def _detect_person_down(person: dict) -> Optional[dict]:
     else:
         horizontal_span = vertical_span / 2  # estimate
 
-    # If width > height significantly → person is horizontal → down
+    # If the bounding box width significantly exceeds height, the person is laying down
+    bbox = person.get("bbox")
+    if bbox:
+        bbox_w = bbox[2] - bbox[0]
+        bbox_h = bbox[3] - bbox[1]
+        if bbox_w > bbox_h * 1.5:
+            return {"behavior": "person_down", "confidence": 0.85}
+
+    # Alternatively, fallback to normalized keypoint aspect ratio check
     if horizontal_span > 0 and vertical_span / (horizontal_span + 1e-6) < 1.2:
         return {"behavior": "person_down", "confidence": 0.78}
     return None

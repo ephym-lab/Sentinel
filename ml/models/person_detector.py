@@ -159,8 +159,6 @@ class PersonDetector:
 
     def reset_tracker(self):
         """Reset ByteTrack state — call when switching to a new camera stream."""
-        # Re-instantiate to clear internal tracking state
-        from ultralytics import YOLO
-        self.model = YOLO(self.model_variant)
-        self.model.to(self.device)
+        if hasattr(self.model, "predictor"):
+            self.model.predictor = None
         logger.info("PersonDetector tracker state reset")

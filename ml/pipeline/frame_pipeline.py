@@ -33,6 +33,7 @@ analysis_mode controls which tracks run:
   audio   → Track 3 (audio only)
 """
 
+import asyncio
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -186,7 +187,7 @@ class FramePipeline:
             crops = []
             for person in result["tracked_persons"]:
                 x1, y1, x2, y2 = person["bbox"]
-                crop = frame[max(0, y1):y2, max(0, x1):x2]
+                crop = frame[max(0, y1):y2, max(0, x1):x2].copy()
                 crops.append(crop)
             embeddings = reid_extractor.extract_batch(crops)
             result["reid_embeddings"] = [
@@ -259,7 +260,7 @@ class FramePipeline:
     # Main pipeline entry point
     # -----------------------------------------------------------------------
 
-    def process(
+    async def process(
         self,
         frame: np.ndarray,
         camera_id: str,
@@ -308,36 +309,40 @@ class FramePipeline:
         _empty_t4 = {"objects": []}
 
         if analysis_mode in ("face", "emotion"):
-            t1 = self._run_track1(frame, mode, analysis_mode)
+            t1 = await asyncio.get_running_loop().run_in_executor(_executor, self._run_track1, frame, mode, analysis_mode)
             t2, t3, t4 = _empty_t2, _empty_t3, _empty_t4
 
         elif analysis_mode in ("person", "pose", "behavior", "behaviour"):
             t1 = _empty_t1
-            t2 = self._run_track2(frame, mode)
+            t2 = await asyncio.get_running_loop().run_in_executor(_executor, self._run_track2, frame, mode)
             t3, t4 = _empty_t3, _empty_t4
 
         elif analysis_mode == "fire":
             t1, t2 = _empty_t1, _empty_t2
-            t3 = self._run_track3(frame, audio_data, mode, analysis_mode)
+            t3 = await asyncio.get_running_loop().run_in_executor(_executor, self._run_track3, frame, audio_data, mode, analysis_mode)
             t4 = _empty_t4
 
         elif analysis_mode == "objects":
             t1, t2, t3 = _empty_t1, _empty_t2, _empty_t3
-            t4 = self._run_track4(frame)
+            t4 = await asyncio.get_running_loop().run_in_executor(_executor, self._run_track4, frame)
 
         elif analysis_mode == "audio":
             t1, t2 = _empty_t1, _empty_t2
-            t3 = self._run_track3(frame, audio_data, mode, analysis_mode)
+            t3 = await asyncio.get_running_loop().run_in_executor(_executor, self._run_track3, frame, audio_data, mode, analysis_mode)
             t3["fire_detections"] = []  # suppress fire output for audio-only mode
             t4 = _empty_t4
 
         else:
-            # "full" — all 4 tracks; Track 4 throttled every 3rd frame
-            t1 = self._run_track1(frame, mode, analysis_mode)
-            t2 = self._run_track2(frame, mode)
-            t3 = self._run_track3(frame, audio_data, mode, analysis_mode)
+            # "full" — run Tracks 1, 2, and 3 concurrently
+            loop = asyncio.get_running_loop()
+            t1_task = loop.run_in_executor(_executor, self._run_track1, frame, mode, analysis_mode)
+            t2_task = loop.run_in_executor(_executor, self._run_track2, frame, mode)
+            t3_task = loop.run_in_executor(_executor, self._run_track3, frame, audio_data, mode, analysis_mode)
+            
+            t1, t2, t3 = await asyncio.gather(t1_task, t2_task, t3_task)
+            
             if frame_count % 3 == 0:
-                t4 = self._run_track4(frame)
+                t4 = await loop.run_in_executor(_executor, self._run_track4, frame)
                 self._last_objects = t4["objects"]
             else:
                 t4 = {"objects": self._last_objects}

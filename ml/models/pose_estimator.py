@@ -210,7 +210,6 @@ class PoseEstimator:
 
     def reset_tracker(self):
         """Reset ByteTrack state for new camera stream."""
-        from ultralytics import YOLO
-        self.model = YOLO(self.model_variant)
-        self.model.to(self.device)
+        if hasattr(self.model, "predictor"):
+            self.model.predictor = None
         logger.info("PoseEstimator tracker state reset")
