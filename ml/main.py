@@ -263,11 +263,13 @@ async def lifespan(app: FastAPI):
     app.state.worker_pool = worker_pool
     polling_task = asyncio.create_task(worker_pool.start_polling_loop())
     
+    app.state.is_shutting_down = False
     logger.info("ML Service ready — accepting requests and running workers")
 
     yield
 
     # Shutdown
+    app.state.is_shutting_down = True
     logger.info("Sentinel ML Service shutting down — releasing models & stopping workers...")
     polling_task.cancel()
     try:
@@ -300,7 +302,7 @@ app = FastAPI(
 # Enable CORS for frontend clients
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:3000", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

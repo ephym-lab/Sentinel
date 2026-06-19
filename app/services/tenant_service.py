@@ -1,5 +1,7 @@
 import logging
 import uuid
+import os
+from pathlib import Path
 from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import engine, TenantBase
@@ -70,6 +72,12 @@ async def create_tenant(db: AsyncSession, data: TenantCreate) -> Tenant:
     
     # 2. Spin up schema and tables
     await create_tenant_schema_tables(tenant.id)
+    
+    # 3. Create tenant upload directories
+    base_upload_dir = Path(settings.UPLOAD_DIR)
+    tenant_dir = base_upload_dir / "tenants" / f"tenant_{tenant.id}"
+    for subfolder in ["incidents", "videos", "images"]:
+        (tenant_dir / subfolder).mkdir(parents=True, exist_ok=True)
     
     return tenant
 

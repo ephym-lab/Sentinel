@@ -60,7 +60,13 @@ class MLSettings(BaseSettings):
         return self.ENV == Environment.PRODUCTION
 
     # --- File storage ---
-    UPLOADS_DIR: str = "uploads"
+    @property
+    def UPLOADS_DIR(self) -> str:
+        """Centralized uploads directory at project root."""
+        root = Path(__file__).resolve().parent.parent
+        folder = root / "uploads"
+        folder.mkdir(parents=True, exist_ok=True)
+        return str(folder)
 
     @property
     def MODELS_DIR(self) -> Path:
@@ -132,11 +138,11 @@ class MLSettings(BaseSettings):
     FACE_DETECTION_CONFIDENCE: float = 0.5
     FACE_RECOGNITION_THRESHOLD: float = 0.75
     PERSON_DETECTION_CONFIDENCE: float = 0.5
-    FIRE_DETECTION_CONFIDENCE: float = 0.3
-    BEHAVIOR_CONFIDENCE: float = 0.65
+    FIRE_DETECTION_CONFIDENCE: float = 0.5
+    BEHAVIOR_CONFIDENCE: float = 0.3
     EMOTION_CONFIDENCE: float = 0.5
     SHOPLIFTING_CONFIDENCE: float = 0.7
-    AUDIO_CONFIDENCE: float = 0.6
+    AUDIO_CONFIDENCE: float = 0.3
     IOU_THRESHOLD: float = 0.45  # NMS IoU threshold (used even in NMS-free for bbox overlap)
 
     # --- Shorthand aliases used by model wrappers ---

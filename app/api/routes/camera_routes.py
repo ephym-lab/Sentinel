@@ -138,8 +138,8 @@ async def upload_camera_feed(
             detail="Invalid file content. The file signature does not match any accepted video format."
         )
 
-    # 5. Create namespaced directory under uploads/videos/
-    video_dir = Path(settings.UPLOAD_DIR) / "videos" / tenant_schema
+    # 5. Create namespaced directory under uploads/tenants/tenant_<id>/videos/
+    video_dir = Path(settings.UPLOAD_DIR) / "tenants" / f"tenant_{x_tenant_id}" / "videos"
     video_dir.mkdir(parents=True, exist_ok=True)
 
     # 6. Save file to disk
@@ -156,7 +156,7 @@ async def upload_camera_feed(
             feed.is_active = False
 
     # 8. Create new active feed record
-    relative_path = f"videos/{tenant_schema}/{safe_name}"
+    relative_path = f"tenants/tenant_{x_tenant_id}/videos/{safe_name}"
     new_feed = CameraFeed(
         id=uuid.uuid4(),
         camera_id=id,

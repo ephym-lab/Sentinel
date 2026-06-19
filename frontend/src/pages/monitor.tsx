@@ -18,6 +18,7 @@ import api, { API_BASE_URL } from "src/lib/api";
 import Link from "next/link";
 import { useEventStream } from "src/hooks/useEventStream";
 import { Camera } from "src/components/cameras/CameraCard";
+import { useAuthStore } from "src/store/authStore";
 
 interface LiveEvent {
   id: string;
@@ -38,6 +39,7 @@ export default function MonitorPage() {
   const [showYoloOverlay, setShowYoloOverlay] = useState(true);
   const [activeDetections, setActiveDetections] = useState<any>(null);
   const [analysisMode, setAnalysisMode] = useState<string>("full");
+  const tenant = useAuthStore((state) => state.tenant);
   
   // Zoom & Pan State
   const [isPaused, setIsPaused] = useState(false);
@@ -47,8 +49,10 @@ export default function MonitorPage() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [manualAnalysisResult, setManualAnalysisResult] = useState<any>(null);
+  const [frozenFrameData, setFrozenFrameData] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamImgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -70,7 +74,24 @@ export default function MonitorPage() {
 
   // Video Controls
   const togglePause = () => {
-    if (videoRef.current) {
+    if (showYoloOverlay) {
+      if (isPaused) {
+        setFrozenFrameData(null);
+        setManualAnalysisResult(null);
+      } else if (streamImgRef.current) {
+        const canvas = document.createElement("canvas");
+        const img = streamImgRef.current;
+        canvas.width = img.naturalWidth || 1280;
+        canvas.height = img.naturalHeight || 720;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          setFrozenFrameData(canvas.toDataURL("image/jpeg", 0.9));
+        }
+      }
+      setIsPaused(!isPaused);
+      addTerminalLog(`Live stream ${!isPaused ? 'FROZEN' : 'RESUMED'}`);
+    } else if (videoRef.current) {
       if (isPaused) {
         videoRef.current.play();
         setManualAnalysisResult(null); // Clear manual analysis on play
@@ -84,7 +105,7 @@ export default function MonitorPage() {
 
   // Zoom handling (Simple scroll to zoom)
   const handleWheel = (e: React.WheelEvent) => {
-    if (!videoRef.current) return;
+    // Works for both video and img streams
     const zoomSensitivity = 0.005;
     let newZoom = zoom - e.deltaY * zoomSensitivity;
     newZoom = Math.max(1, Math.min(newZoom, 8)); // Clamp between 1x and 8x
@@ -110,22 +131,30 @@ export default function MonitorPage() {
 
   // Manual Frame Analysis
   const performManualAnalysis = async () => {
-    const video = videoRef.current;
-    if (!video || !selectedCamera) return;
+    if (!selectedCamera) return;
 
     setIsAnalyzing(true);
     addTerminalLog(`[MANUAL] Initiating high-res analysis on current frame...`);
 
     try {
-      const canvas = document.createElement("canvas");
-      // Use native video resolution for detailed manual analysis
-      canvas.width = video.videoWidth || 1920;
-      canvas.height = video.videoHeight || 1080;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-        const base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
+      let base64 = "";
+
+      if (showYoloOverlay && frozenFrameData) {
+         base64 = frozenFrameData.substring(frozenFrameData.indexOf(",") + 1);
+      } else if (videoRef.current) {
+         const video = videoRef.current;
+         const canvas = document.createElement("canvas");
+         canvas.width = video.videoWidth || 1920;
+         canvas.height = video.videoHeight || 1080;
+         const ctx = canvas.getContext("2d");
+         if (ctx) {
+           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+           const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+           base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
+         }
+      }
+
+      if (base64) {
 
         const response = await api.post("/surveillance/process-frame", {
           camera_id: selectedCamera.id,
@@ -247,299 +276,16 @@ export default function MonitorPage() {
   };
 
   // Frame capture loop for live YOLO processing
+  // (Disabled: now using backend MJPEG streaming to ensure perfect sync)
   useEffect(() => {
-    if (!showYoloOverlay || !selectedCamera?.active_feed?.file_path) {
-      setActiveDetections(null);
-      return;
-    }
-
-    const video = videoRef.current;
-    if (!video) return;
-
-    let isSubscribed = true;
-    let timerId: NodeJS.Timeout;
-
-    const captureAndProcessFrame = async () => {
-      if (!isSubscribed) return;
-      
-      if (video.paused || video.ended) {
-        // If paused, schedule next check without extracting frame
-        timerId = setTimeout(captureAndProcessFrame, 400);
-        return;
-      }
-
-      try {
-        const canvas = document.createElement("canvas");
-        // Extract at fixed low resolution for highly optimized transfer and backend inference
-        canvas.width = 640;
-        canvas.height = 360;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
-          const base64 = dataUrl.substring(dataUrl.indexOf(",") + 1);
-
-          const response = await api.post("/surveillance/process-frame", {
-            camera_id: selectedCamera.id,
-            image_b64: base64,
-            analysis_mode: analysisMode,
-          });
-
-          if (isSubscribed && response.data?.ml_raw_metrics) {
-            setActiveDetections(response.data.ml_raw_metrics);
-            
-            const metrics = response.data.ml_raw_metrics;
-            if (metrics.fire_detected) {
-              addTerminalLog(`[ALERT] YOLO verified fire signature in camera stream!`);
-            } else if (metrics.persons_count > 0) {
-              addTerminalLog(`[YOLO] Detected ${metrics.persons_count} person(s) on-screen.`);
-            } else if ((metrics.faces || []).length > 0) {
-              addTerminalLog(`[YOLO] Detected ${metrics.faces.length} face(s) on-screen.`);
-            }
-
-            // Log security-relevant objects
-            const securityObjects = (metrics.objects || []).filter((o: any) => o.is_security_relevant);
-            if (securityObjects.length > 0) {
-              const labels = securityObjects.map((o: any) => `${o.label} (${Math.round(o.confidence * 100)}%)`).join(", ");
-              addTerminalLog(`[YOLO] Objects detected: ${labels}`);
-            }
-          }
-
-        }
-      } catch (err) {
-        console.error("Surveillance frame processing failed:", err);
-      }
-
-      if (isSubscribed) {
-        timerId = setTimeout(captureAndProcessFrame, 400); // Process at ~2.5 FPS for server thriftiness
-      }
-    };
-
-    // Begin loop
-    timerId = setTimeout(captureAndProcessFrame, 400);
-
-    return () => {
-      isSubscribed = false;
-      clearTimeout(timerId);
-    };
+    setActiveDetections(null);
+    setFrozenFrameData(null);
+    setIsPaused(false);
   }, [showYoloOverlay, selectedCamera]);
 
   // Real-time YOLO Bounding Box Drawer
+  // (Disabled: now rendered directly on the backend MJPEG stream)
   useEffect(() => {
-    if (!showYoloOverlay || !selectedCamera?.active_feed?.file_path) return;
-
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animationId: number;
-
-    const draw = () => {
-      if (!video || !canvas || !ctx) return;
-
-      // Sync canvas dimensions with containing block
-      const rect = video.getBoundingClientRect();
-      const parent = video.parentElement;
-      const parentRect = parent ? parent.getBoundingClientRect() : rect;
-      
-      if (canvas.width !== parentRect.width || canvas.height !== parentRect.height) {
-        canvas.width = parentRect.width;
-        canvas.height = parentRect.height;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Compute inner video dimensions for object-contain scaling
-      const videoWidth = video.videoWidth || 640;
-      const videoHeight = video.videoHeight || 360;
-      const scale = Math.min(canvas.width / videoWidth, canvas.height / videoHeight);
-      
-      const displayWidth = videoWidth * scale;
-      const displayHeight = videoHeight * scale;
-      
-      const offsetX = (canvas.width - displayWidth) / 2;
-      const offsetY = (canvas.height - displayHeight) / 2;
-
-      // Maps coordinates relative to the 640x360 extraction resolution
-      const scaleX = displayWidth / 640;
-      const scaleY = displayHeight / 360;
-
-      if (activeDetections) {
-          // ── Face Detections (Track 1) ──────────────────────────────────
-          const faces = activeDetections.faces || [];
-          faces.forEach((face: any) => {
-            const [x1, y1, x2, y2] = face.bbox;
-            const x = offsetX + x1 * scaleX;
-            const y = offsetY + y1 * scaleY;
-            const w = (x2 - x1) * scaleX;
-            const h = (y2 - y1) * scaleY;
-            const color = "#06b6d4"; // Cyan — distinct from persons (green)
-
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([2, 2]);
-            ctx.strokeRect(x, y, w, h);
-            ctx.setLineDash([]);
-
-            ctx.fillStyle = color;
-            ctx.font = "9px monospace";
-            const conf = Math.round(face.confidence * 100);
-            const labelText = `Face ${conf}%`;
-            const tw = ctx.measureText(labelText).width;
-            ctx.fillRect(x - 1, y - 12, tw + 6, 12);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillText(labelText, x + 2, y - 3);
-          });
-
-          // ── General Objects (Track 4) ─────────────────────────────────
-          const objects = activeDetections.objects || [];
-          objects.forEach((obj: any) => {
-            const [x1, y1, x2, y2] = obj.bbox;
-            const x = offsetX + x1 * scaleX;
-            const y = offsetY + y1 * scaleY;
-            const w = (x2 - x1) * scaleX;
-            const h = (y2 - y1) * scaleY;
-            // Security-relevant → amber; everything else → slate-blue
-            const color = obj.is_security_relevant ? "#f59e0b" : "#6366f1";
-
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 3]); // dashed to distinguish from solid person boxes
-            ctx.strokeRect(x, y, w, h);
-            ctx.setLineDash([]);
-
-            // Label badge
-            const conf = Math.round(obj.confidence * 100);
-            const labelText = `${obj.label} ${conf}%`;
-            ctx.font = "9px monospace";
-            const textWidth = ctx.measureText(labelText).width;
-            ctx.fillStyle = color;
-            ctx.fillRect(x - 1, y - 12, textWidth + 6, 12);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillText(labelText, x + 2, y - 3);
-          });
-
-          // ── Tracked Persons (Track 2) ─────────────────────────────────
-        const persons = activeDetections.tracked_persons || [];
-        persons.forEach((person: any) => {
-          const [x1, y1, x2, y2] = person.bbox;
-          const x = offsetX + x1 * scaleX;
-          const y = offsetY + y1 * scaleY;
-          const w = (x2 - x1) * scaleX;
-          const h = (y2 - y1) * scaleY;
-          const color = "#10b981"; // Emerald green
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(x, y, w, h);
-
-          // Corner brackets
-          const cornerLen = Math.min(w, h) * 0.15;
-          ctx.fillStyle = color;
-          ctx.fillRect(x - 1, y - 1, cornerLen, 2.5);
-          ctx.fillRect(x - 1, y - 1, 2.5, cornerLen);
-          ctx.fillRect(x + w - cornerLen + 1, y - 1, cornerLen, 2.5);
-          ctx.fillRect(x + w - 1.5, y - 1, 2.5, cornerLen);
-          ctx.fillRect(x - 1, y + h - 1.5, cornerLen, 2.5);
-          ctx.fillRect(x - 1, y + h - cornerLen + 1, 2.5, cornerLen);
-          ctx.fillRect(x + w - cornerLen + 1, y + h - 1.5, cornerLen, 2.5);
-          ctx.fillRect(x + w - 1.5, y + h - cornerLen + 1, 2.5, cornerLen);
-
-          // Text label
-          ctx.fillStyle = color;
-          ctx.font = "9px monospace";
-          const labelText = `Person #${person.track_id} ${(person.confidence * 100).toFixed(0)}%`;
-          const textWidth = ctx.measureText(labelText).width;
-          ctx.fillRect(x - 1, y - 12, textWidth + 6, 12);
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(labelText, x + 2, y - 3);
-
-          // Draw skeletal keypoints if available
-          const keypoints = person.keypoints || [];
-          if (keypoints.length === 17) {
-            // Draw skeleton lines (standard COCO connections)
-            const connections = [
-              [0, 1], [0, 2], [1, 3], [2, 4], // Head
-              [5, 6], [5, 7], [7, 9], [6, 8], [8, 10], // Arms and Shoulders
-              [5, 11], [6, 12], [11, 12], // Torso
-              [11, 13], [13, 15], [12, 14], [14, 16] // Legs
-            ];
-            
-            ctx.strokeStyle = "rgba(251, 191, 36, 0.7)"; // Amber
-            ctx.lineWidth = 1.5;
-            
-            connections.forEach(([i, j]) => {
-              const kp1 = keypoints[i];
-              const kp2 = keypoints[j];
-              if (kp1 && kp2 && kp1.confidence > 0.4 && kp2.confidence > 0.4) {
-                ctx.beginPath();
-                ctx.moveTo(offsetX + kp1.x * scaleX, offsetY + kp1.y * scaleY);
-                ctx.lineTo(offsetX + kp2.x * scaleX, offsetY + kp2.y * scaleY);
-                ctx.stroke();
-              }
-            });
-
-            // Draw individual joints
-            ctx.fillStyle = "#fbbf24"; 
-            keypoints.forEach((kp: any) => {
-              if (kp.confidence > 0.4) {
-                const kx = offsetX + kp.x * scaleX;
-                const ky = offsetY + kp.y * scaleY;
-                ctx.beginPath();
-                ctx.arc(kx, ky, 2.5, 0, 2 * Math.PI);
-                ctx.fill();
-              }
-            });
-          }
-        });
-
-        // ── Fire Detections (Track 3) ─────────────────────────────────
-        const fireDetections = activeDetections.fire_detections || [];
-        fireDetections.forEach((fire: any) => {
-          const [x1, y1, x2, y2] = fire.bbox;
-          const x = offsetX + x1 * scaleX;
-          const y = offsetY + y1 * scaleY;
-          const w = (x2 - x1) * scaleX;
-          const h = (y2 - y1) * scaleY;
-          const color = "#ef4444"; // Red
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(x, y, w, h);
-
-          const cornerLen = Math.min(w, h) * 0.15;
-          ctx.fillStyle = color;
-          ctx.fillRect(x - 1, y - 1, cornerLen, 2.5);
-          ctx.fillRect(x - 1, y - 1, 2.5, cornerLen);
-          ctx.fillRect(x + w - cornerLen + 1, y - 1, cornerLen, 2.5);
-          ctx.fillRect(x + w - 1.5, y - 1, 2.5, cornerLen);
-          ctx.fillRect(x - 1, y + h - 1.5, cornerLen, 2.5);
-          ctx.fillRect(x - 1, y + h - cornerLen + 1, 2.5, cornerLen);
-          ctx.fillRect(x + w - cornerLen + 1, y + h - 1.5, cornerLen, 2.5);
-          ctx.fillRect(x + w - 1.5, y + h - cornerLen + 1, 2.5, cornerLen);
-
-          ctx.fillStyle = color;
-          ctx.font = "bold 9px monospace";
-          const labelText = `FIRE ${(fire.confidence * 100).toFixed(0)}%`;
-          const textWidth = ctx.measureText(labelText).width;
-          ctx.fillRect(x - 1, y - 12, textWidth + 6, 12);
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(labelText, x + 2, y - 3);
-        });
-      }
-
-
-      animationId = requestAnimationFrame(draw);
-    };
-
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animationId);
-    };
   }, [showYoloOverlay, selectedCamera, activeDetections]);
 
   return (
@@ -721,26 +467,38 @@ export default function MonitorPage() {
                     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   }}
                 >
-                  <video
-                    ref={videoRef}
-                    src={`${API_BASE_URL}/static/${selectedCamera.active_feed.file_path}`}
-                    crossOrigin="anonymous"
-                    controls
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    className="w-full h-full object-contain"
-                  />
+                  {showYoloOverlay && tenant?.id ? (
+                    frozenFrameData ? (
+                      <img
+                        src={frozenFrameData}
+                        className="w-full h-full object-contain pointer-events-none"
+                        alt="Frozen Video Stream"
+                      />
+                    ) : (
+                      <img
+                        ref={streamImgRef}
+                        src={`${API_BASE_URL.replace("8000", "8001")}/stream?camera_id=${selectedCamera.id}&file_path=${encodeURIComponent(selectedCamera.active_feed.file_path)}&mode=${tenant.mode}&tenant_id=${tenant.id}&analysis_mode=${analysisMode}`}
+                        crossOrigin="anonymous"
+                        className="w-full h-full object-contain pointer-events-none"
+                        alt="Processed Video Stream"
+                      />
+                    )
+                  ) : (
+                    <video
+                      ref={videoRef}
+                      src={`${API_BASE_URL}/static/${selectedCamera.active_feed.file_path}`}
+                      crossOrigin="anonymous"
+                      controls
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      className="w-full h-full object-contain"
+                    />
+                  )}
                   {/* Drag/Pan Overlay to catch mouse events smoothly when zoomed */}
                   {zoom > 1 && (
                     <div className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing" />
-                  )}
-                  {showYoloOverlay && (
-                    <canvas
-                      ref={canvasRef}
-                      className="absolute top-0 left-0 w-full h-full pointer-events-none z-20"
-                    />
                   )}
                 </div>
 

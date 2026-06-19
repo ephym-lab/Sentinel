@@ -74,3 +74,4 @@ models/
 app/*.db
 app/*.pyc
 app/*.pyc
+uploads/*

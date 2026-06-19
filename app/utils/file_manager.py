@@ -37,12 +37,12 @@ class LocalFileManager:
         path = (
             self.base_dir
             / "tenants"
-            / str(tenant_id)
+            / f"tenant_{tenant_id}"
+            / incident_type
             / str(date.year)
             / f"{date.month:02d}"
             / f"{date.day:02d}"
             / str(camera_id)
-            / incident_type
         )
         path.mkdir(parents=True, exist_ok=True)
         return path
@@ -82,9 +82,8 @@ class LocalFileManager:
 
     def cleanup_old_files(self, tenant_id: str, retention_days: int = 30):
         """Delete files older than retention_days for a specific tenant."""
-        tenant_dir = self.base_dir / "tenants" / str(tenant_id)
+        tenant_dir = self.base_dir / "tenants" / f"tenant_{tenant_id}"
         if not tenant_dir.exists():
-
             return
 
         cutoff = datetime.datetime.now() - datetime.timedelta(days=retention_days)

@@ -42,3 +42,7 @@ api_router.include_router(reid_router, prefix="/reid", tags=["Re-ID"])
 from ml.api.frame_routes import router as frame_router
 api_router.include_router(frame_router, prefix="/pipeline", tags=["Pipeline"])
 
+# Phase 7 — MJPEG Streaming
+from ml.api.stream_routes import router as stream_router
+api_router.include_router(stream_router, prefix="/stream", tags=["Stream"])
+

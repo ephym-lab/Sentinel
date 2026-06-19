@@ -107,6 +107,18 @@ class FaceDetector:
                     x1, y1, x2, y2 = boxes.xyxy[i].cpu().numpy().astype(int)
                     confidence = float(boxes.conf[i].cpu().numpy())
 
+                    if not self.is_custom_face_model:
+                        # Heuristic: Estimate face region from person bounding box
+                        w = x2 - x1
+                        h = y2 - y1
+                        face_w = int(w * 0.4)
+                        face_h = face_w  # Approximate face as a square
+                        
+                        x1 = x1 + int((w - face_w) / 2)
+                        x2 = x1 + face_w
+                        y1 = y1 + int(h * 0.05)  # Start slightly below the very top
+                        y2 = y1 + face_h
+
                     face = {
                         "bbox": (int(x1), int(y1), int(x2), int(y2)),
                         "confidence": confidence,

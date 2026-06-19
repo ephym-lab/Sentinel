@@ -148,11 +148,13 @@ async def upload_face_photo(
     image_bytes = await file.read()
     
     # Save image file to local storage
-    # Directory structure: uploads/images/enrollments/<person_id>/
+    # Directory structure: uploads/tenants/tenant_<tenant_id>/images/
+    # For now we'll put it in shared_enrollments/images or if tenant_id was available it would be there.
+    # But since there is no x_tenant_id passed, we'll keep shared_enrollments but change folder to images.
     rel_path = file_manager.save_file(
         tenant_id="shared_enrollments",
         camera_id="enrollment_station",
-        incident_type="profiles",
+        incident_type="images",
         file_bytes=image_bytes,
         extension=file.filename.split(".")[-1] if "." in file.filename else "jpg",
         prefix=f"person_{person_id}"

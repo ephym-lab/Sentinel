@@ -269,7 +269,7 @@ async def process_camera_frame(
             snapshot_path = file_manager.save_file(
                 tenant_id=tenant_id,
                 camera_id=camera_id,
-                incident_type="incident_evidence",
+                incident_type="incidents",
                 file_bytes=image_data,
                 extension="jpg",
                 prefix="incident"
