@@ -24,8 +24,9 @@ router = APIRouter(tags=["Fire & Safety"])
 class FireDetectRequest(BaseModel):
     image_b64: str = Field(..., description="Base64-encoded camera frame")
     camera_id: str = Field(..., description="Camera identifier for alert context")
+    tenant_id: str = Field(..., description="Tenant UUID for scoped file storage")
     save_snapshot: bool = Field(
-        True, description="Save a snapshot to uploads/images/fire/ if fire is detected"
+        True, description="Save a snapshot to uploads/tenants/{tenant_id}/incidents/ if fire is detected"
     )
 
 
@@ -73,7 +74,12 @@ async def detect_fire(
     # Save snapshot when fire/smoke is detected for evidence
     snapshot_path = None
     if request.save_snapshot and raw_detections:
-        snapshot_path = save_snapshot(frame, category="fire", prefix=request.camera_id)
+        snapshot_path = save_snapshot(
+            frame,
+            category="incidents",
+            prefix=request.camera_id,
+            tenant_id=request.tenant_id,
+        )
 
     elapsed_ms = (time.perf_counter() - start) * 1000
 

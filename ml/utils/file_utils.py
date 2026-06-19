@@ -28,19 +28,24 @@ def save_snapshot(
     category: str,
     prefix: str = "",
     format: str = ".jpg",
+    tenant_id: str = None,
 ) -> str:
-    """Save an image snapshot to uploads/images/{category}/.
+    """Save an image snapshot to uploads/tenants/{tenant_id}/{category}/.
 
     Args:
         image: BGR numpy array to save.
-        category: Subdirectory under images/ (e.g. 'faces', 'events', 'poi', 'shoplifting').
-        prefix: Optional filename prefix for readability.
+        category: Subdirectory (e.g. 'incidents', 'images', 'enrollments').
+        prefix: Optional filename prefix.
         format: Image format extension.
+        tenant_id: Required tenant UUID string.
 
     Returns:
-        Relative path string (e.g. 'uploads/images/faces/face_2026-06-16_abc123.jpg').
+        Absolute path string of the saved file.
     """
-    save_dir = settings.images_dir / category
+    if not tenant_id:
+        raise ValueError("tenant_id is required for save_snapshot")
+    
+    save_dir = settings.tenant_dir(tenant_id, category)
     _ensure_dir(save_dir)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
@@ -53,9 +58,8 @@ def save_snapshot(
     if not success:
         raise IOError(f"Failed to save snapshot to {filepath}")
 
-    relative_path = str(filepath)
-    logger.debug(f"Saved snapshot: {relative_path}")
-    return relative_path
+    logger.debug(f"Saved snapshot: {filepath}")
+    return str(filepath)
 
 
 def save_video_clip(
@@ -63,22 +67,26 @@ def save_video_clip(
     category: str,
     fps: float = 15.0,
     prefix: str = "",
+    tenant_id: str = None,
 ) -> str:
-    """Save a list of frames as an MP4 video clip to uploads/videos/{category}/.
+    """Save a list of frames as an MP4 to uploads/tenants/{tenant_id}/{category}/.
 
     Args:
         frames: List of BGR numpy arrays (all same shape).
-        category: Subdirectory under videos/ (e.g. 'events', 'poi', 'shoplifting').
-        fps: Frames per second for the output clip.
+        category: Subdirectory (e.g. 'videos').
+        fps: Frames per second.
         prefix: Optional filename prefix.
+        tenant_id: Required tenant UUID string.
 
     Returns:
-        Relative path string (e.g. 'uploads/videos/events/fight_2026-06-16_abc123.mp4').
+        Absolute path string of the saved file.
     """
     if not frames:
         raise ValueError("Cannot save empty frame list as video clip")
+    if not tenant_id:
+        raise ValueError("tenant_id is required for save_video_clip")
 
-    save_dir = settings.videos_dir / category
+    save_dir = settings.tenant_dir(tenant_id, category)
     _ensure_dir(save_dir)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
@@ -96,6 +104,5 @@ def save_video_clip(
     finally:
         writer.release()
 
-    relative_path = str(filepath)
-    logger.debug(f"Saved video clip ({len(frames)} frames): {relative_path}")
-    return relative_path
+    logger.debug(f"Saved video clip ({len(frames)} frames): {filepath}")
+    return str(filepath)

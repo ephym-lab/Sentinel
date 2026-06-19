@@ -240,9 +240,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"YOLO26 end-to-end (NMS-free): {settings.YOLO_END2END}")
     logger.info("=" * 60)
 
-    # Ensure upload directories exist
-    settings.images_dir.mkdir(parents=True, exist_ok=True)
-    settings.videos_dir.mkdir(parents=True, exist_ok=True)
+    # Ensure uploads root exists (tenant dirs are created on first save)
+    Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
 
     # Ensure custom weights directory exists
     Path("ml/weights").mkdir(parents=True, exist_ok=True)

@@ -135,10 +135,15 @@ async def enroll_face(
     # Use the largest face (most likely the subject)
     best = max(results, key=lambda r: (r["bbox"][2] - r["bbox"][0]) * (r["bbox"][3] - r["bbox"][1]))
 
-    # Save face snapshot for records
+    # Save face snapshot for records (under the tenant's images/ directory)
     x1, y1, x2, y2 = best["bbox"]
     face_crop = frame[max(0, y1):y2, max(0, x1):x2]
-    snapshot_path = save_snapshot(face_crop, category="enrollments", prefix=request.person_id)
+    snapshot_path = save_snapshot(
+        face_crop,
+        category="images",
+        prefix=request.person_id,
+        tenant_id=getattr(request, "tenant_id", None),
+    )
 
     bbox = FaceBBox(
         x1=x1, y1=y1, x2=x2, y2=y2,

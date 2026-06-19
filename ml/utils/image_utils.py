@@ -135,3 +135,55 @@ def expand_bbox(
     y2 = min(h, int(y2 + bh * margin))
 
     return x1, y1, x2, y2
+
+
+def annotate_frame(frame: np.ndarray, result: dict) -> np.ndarray:
+    """Draw bounding boxes and labels on a frame based on pipeline results.
+    Modifies the frame in-place.
+    """
+    # Draw Face boxes (Cyan)
+    for face in result.get("faces", []):
+        x1, y1, x2, y2 = map(int, face["bbox"])
+        conf = int(face.get("confidence", 0) * 100)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
+        cv2.putText(frame, f"Face {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+        
+    # Create behavior lookup
+    behaviors_by_track = {}
+    for b in result.get("behaviors", []):
+        behaviors_by_track[b["track_id"]] = b
+
+    # Draw Person boxes (Green, or Red if bad behavior)
+    for person in result.get("tracked_persons", []):
+        x1, y1, x2, y2 = map(int, person["bbox"])
+        conf = int(person.get("confidence", 0) * 100)
+        track_id = person.get("track_id", "?")
+        
+        behavior = behaviors_by_track.get(track_id)
+        if behavior:
+            # Threat behavior detected! Draw prominent Red box
+            label = str(behavior.get("behavior", "UNKNOWN")).upper()
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.putText(frame, f"{label}!", (x1, max(20, y1 - 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 3)
+            cv2.putText(frame, f"Person #{track_id} {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        else:
+            # Normal person (Green)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"Person #{track_id} {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+    # Draw General Objects (Purple)
+    for obj in result.get("objects", []):
+        x1, y1, x2, y2 = map(int, obj["bbox"])
+        conf = int(obj.get("confidence", 0) * 100)
+        label = obj.get("label", "obj")
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 255), 2)
+        cv2.putText(frame, f"{label} {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
+        
+    # Draw Fire (Red)
+    if result.get("fire_detected") or result.get("fire_detections"):
+        for fire in result.get("fire_detections", []):
+            x1, y1, x2, y2 = map(int, fire["bbox"])
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.putText(frame, "FIRE", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            
+    return frame

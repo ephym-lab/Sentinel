@@ -361,10 +361,23 @@ class FramePipeline:
         # ── Save evidence if threat detected ─────────────────────────────
         snapshot_paths = []
         if threat["is_threat"] or t3.get("is_fire", False):
+            # Create a dictionary mimicking the final result for annotation
+            annot_data = {
+                "faces": t1["faces"],
+                "tracked_persons": t2["tracked_persons"],
+                "behaviors": t2.get("behaviors", []),
+                "objects": t4["objects"],
+                "fire_detections": t3["fire_detections"]
+            }
+            
+            from ml.utils.image_utils import annotate_frame
+            annotated_frame = annotate_frame(frame.copy(), annot_data)
+            
             snapshot_path = save_snapshot(
-                frame,
+                annotated_frame,
                 category="incidents",
                 prefix=f"{camera_id}_{mode}",
+                tenant_id=tenant_id,
             )
             if snapshot_path:
                 snapshot_paths.append(snapshot_path)

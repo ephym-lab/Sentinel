@@ -76,13 +76,11 @@ class MLSettings(BaseSettings):
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
-    @property
-    def images_dir(self) -> Path:
-        return Path(self.UPLOADS_DIR) / "images"
-
-    @property
-    def videos_dir(self) -> Path:
-        return Path(self.UPLOADS_DIR) / "videos"
+    def tenant_dir(self, tenant_id: str, sub: str) -> Path:
+        """Return and auto-create uploads/tenants/{tenant_id}/{sub}/"""
+        path = Path(self.UPLOADS_DIR) / "tenants" / tenant_id / sub
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     # --- YOLO26 model variants ---
     # Standard pretrained models from Ultralytics (auto-downloaded)

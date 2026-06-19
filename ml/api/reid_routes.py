@@ -26,7 +26,8 @@ router = APIRouter(tags=["Re-ID"])
 class ReIDExtractRequest(BaseModel):
     person_crop_b64: str = Field(..., description="Base64-encoded person crop (BGR, full body)")
     track_id: int | None = Field(None, description="ByteTrack ID for logging")
-    save_snapshot: bool = Field(False, description="Save crop to uploads/images/reid/")
+    tenant_id: str | None = Field(None, description="Tenant UUID for scoped file storage")
+    save_snapshot: bool = Field(False, description="Save crop to uploads/tenants/{tenant_id}/images/")
 
 
 class ReIDBatchRequest(BaseModel):
@@ -74,9 +75,14 @@ async def extract_reid(
         )
 
     snapshot_path = None
-    if request.save_snapshot:
+    if request.save_snapshot and request.tenant_id:
         prefix = f"track_{request.track_id}" if request.track_id is not None else "unknown"
-        snapshot_path = save_snapshot(crop, category="reid", prefix=prefix)
+        snapshot_path = save_snapshot(
+            crop,
+            category="images",
+            prefix=prefix,
+            tenant_id=request.tenant_id,
+        )
 
     return ReIDResult(
         embedding=embedding.tolist(),

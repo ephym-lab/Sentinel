@@ -81,35 +81,8 @@ async def video_stream_generator(request: Request, camera_id: str, file_path: st
                 
                 result = cached_result
                 
-                # Draw Face boxes (Cyan)
-                for face in result.get("faces", []):
-                    x1, y1, x2, y2 = map(int, face["bbox"])
-                    conf = int(face.get("confidence", 0) * 100)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 255, 0), 2)
-                    cv2.putText(frame, f"Face {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
-                    
-                # Draw Person boxes (Green)
-                for person in result.get("tracked_persons", []):
-                    x1, y1, x2, y2 = map(int, person["bbox"])
-                    conf = int(person.get("confidence", 0) * 100)
-                    track_id = person.get("track_id", "?")
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, f"Person #{track_id} {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                    
-                # Draw General Objects (Purple)
-                for obj in result.get("objects", []):
-                    x1, y1, x2, y2 = map(int, obj["bbox"])
-                    conf = int(obj.get("confidence", 0) * 100)
-                    label = obj.get("label", "obj")
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 255), 2)
-                    cv2.putText(frame, f"{label} {conf}%", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2)
-                    
-                # Draw Fire (Red)
-                if result.get("fire_detections"):
-                    for fire in result.get("fire_detections", []):
-                        x1, y1, x2, y2 = map(int, fire["bbox"])
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                        cv2.putText(frame, "FIRE", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                from ml.utils.image_utils import annotate_frame
+                frame = annotate_frame(frame, result)
                         
             except Exception as e:
                 logger.error(f"Stream processing error: {e}", exc_info=True)
