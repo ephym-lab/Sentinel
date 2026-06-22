@@ -137,9 +137,9 @@ class MLSettings(BaseSettings):
     FACE_DETECTION_CONFIDENCE: float = 0.5
     FACE_RECOGNITION_THRESHOLD: float = 0.75
     PERSON_DETECTION_CONFIDENCE: float = 0.5
-    FIRE_DETECTION_CONFIDENCE: float = 0.5
-    BEHAVIOR_CONFIDENCE: float = 0.3
-    EMOTION_CONFIDENCE: float = 0.5
+    FIRE_DETECTION_CONFIDENCE: float = 0.7
+    BEHAVIOR_CONFIDENCE: float = 0.5
+    EMOTION_CONFIDENCE: float = 0.6
     SHOPLIFTING_CONFIDENCE: float = 0.7
     AUDIO_CONFIDENCE: float = 0.3
     IOU_THRESHOLD: float = 0.45  # NMS IoU threshold (used even in NMS-free for bbox overlap)
