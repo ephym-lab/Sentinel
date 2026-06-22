@@ -28,6 +28,7 @@ async def create_tenant_schema_tables(tenant_id: uuid.UUID):
     # Explicitly import all tenant-specific models so they register on TenantBase
     from app.models.camera import Camera
     from app.models.camera_feed import CameraFeed
+    from app.models.camera_rule import CameraRule
     from app.models.poi import POI
 
     from app.models.notification_recipient import NotificationRecipient

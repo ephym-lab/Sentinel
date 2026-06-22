@@ -17,6 +17,7 @@ class Camera(TenantBase):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     feeds = relationship("CameraFeed", back_populates="camera", cascade="all, delete-orphan")
+    rules = relationship("CameraRule", back_populates="camera", cascade="all, delete-orphan")
 
     @property
     def active_feed(self) -> object | None:

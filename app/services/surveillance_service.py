@@ -14,6 +14,7 @@ from app.models.poi_sighting import POISighting
 from app.models.detection_event import DetectionEvent
 from app.models.incident import Incident
 from app.models.person import Person
+from app.models.camera_rule import CameraRule
 from app.models.guardian import Guardian
 from app.models.journey_event import JourneyEvent
 from app.services.ml_client import ml_client
@@ -155,11 +156,43 @@ async def process_camera_frame(
     if not tenant:
         raise ValueError(f"Tenant '{tenant_id}' not found.")
 
+    # 1.5 Evaluate dynamic rules for this camera
+    stmt_all = select(CameraRule).where(CameraRule.camera_id == camera_uuid)
+    all_rules = (await db.execute(stmt_all)).scalars().all()
+    
+    # If the user has created at least one rule (active or inactive), we enforce strict rule-engine logic.
+    # Otherwise, fallback to the legacy environment mode.
+    if len(all_rules) > 0:
+        now = datetime.datetime.now().time()
+        active_behaviors = set()
+        
+        for rule in all_rules:
+            if not rule.is_active:
+                continue
+                
+            # Time bounds check
+            if rule.start_time and rule.end_time:
+                if rule.start_time <= rule.end_time:
+                    if not (rule.start_time <= now <= rule.end_time):
+                        continue
+                else: # Overnight rule (e.g. 22:00 to 06:00)
+                    if not (now >= rule.start_time or now <= rule.end_time):
+                        continue
+                        
+            if rule.behavior:
+                for b in rule.behavior.split(","):
+                    active_behaviors.add(b.strip())
+                    
+        # Join into a comma-separated string, or pass 'none' if empty to disable all behaviors
+        computed_mode = ",".join(active_behaviors) if active_behaviors else "none"
+    else:
+        computed_mode = tenant.mode
+
     # 2. Call ML Service
     ml_result = await ml_client.process_frame(
         image_b64=image_b64,
         camera_id=camera_id,
-        mode=tenant.mode,
+        mode=computed_mode,
         tenant_id=tenant_id,
         audio_b64=audio_b64,
         analysis_mode=analysis_mode,

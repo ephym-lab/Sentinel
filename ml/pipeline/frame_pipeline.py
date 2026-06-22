@@ -173,14 +173,30 @@ class FramePipeline:
             return result
 
         # Behavior analysis
-        if behavior_clf and raw_persons and mode in ("school", "mall", "supermarket"):
+        if behavior_clf and raw_persons:
             h, w = frame.shape[:2]
-            behaviors = behavior_clf.analyze(
-                raw_persons,
-                frame_shape=(h, w, 3),
-                mode=mode,
-            )
-            result["behaviors"] = behaviors
+            
+            # Convert legacy mode or dynamic rule engine string to a list of behaviors
+            if "," in mode:
+                active_behaviors = [b.strip() for b in mode.split(",")]
+            elif mode in ("school", "mall", "supermarket"):
+                # Fallback to all behaviors if just a legacy mode string is passed
+                active_behaviors = [
+                    "fighting", "crowd_panic", "person_down", "loitering", 
+                    "suspicious_proximity", "perimeter_climbing", "night_gathering",
+                    "concealment_gesture", "item_to_bag", "repeated_aisle_passes", 
+                    "high_value_dwell", "self_checkout_anomaly", "crowd_crush"
+                ]
+            else:
+                active_behaviors = []
+                
+            if active_behaviors:
+                behaviors = behavior_clf.analyze(
+                    raw_persons,
+                    active_behaviors=active_behaviors,
+                    frame_shape=(h, w, 3),
+                )
+                result["behaviors"] = behaviors
 
         # Re-ID extraction (mall + supermarket for cross-camera tracking)
         if reid_extractor and result["tracked_persons"] and mode in ("mall", "supermarket"):
