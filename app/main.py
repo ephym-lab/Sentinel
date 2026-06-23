@@ -157,7 +157,13 @@ app.include_router(websocket_routes.router, prefix="/ws")
 # Mount static files for local-first storage
 import os
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-app.mount("/static", StaticFiles(directory=settings.UPLOAD_DIR), name="static")
+# The database stores paths starting with 'uploads/'.
+# The frontend requests '/static/uploads/...'.
+# By mounting at '/static', Starlette looks for 'uploads/uploads/...'.
+# By mounting at '/', it would look for 'uploads/...', but we want a prefix.
+# We mount at '/static' but we can use directory="." so it finds 'uploads/...'
+# Or mount at '/static/uploads' with directory=settings.UPLOAD_DIR.
+app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="static_uploads")
 
 
 @app.get("/health", tags=["Health"])

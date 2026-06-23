@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, func, UUID, Text
+from sqlalchemy import Column, String, ForeignKey, DateTime, func, UUID, Text, JSON
 from pgvector.sqlalchemy import Vector
 from app.db.base import TenantBase
 
@@ -20,3 +20,4 @@ class POI(TenantBase):
     status = Column(String, nullable=False, default="active")  # active, resolved, expired
     created_by = Column(UUID(as_uuid=True), nullable=True)  # link to user who flagged them
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    target_cameras = Column(JSON, nullable=True, default=list)  # list of camera IDs, empty means all cameras

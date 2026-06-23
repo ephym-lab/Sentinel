@@ -93,10 +93,18 @@ async def recognize_face(
             "Ensure the image contains a clearly visible face.",
         )
 
+    snapshot_path = None
+    if request.tenant_id and request.poi_id:
+        from ml.utils.file_utils import save_snapshot
+        from pathlib import Path
+        abs_path = save_snapshot(face_crop, category="poi_faces", prefix=request.poi_id, tenant_id=str(request.tenant_id))
+        # Backend expects paths like 'uploads/tenants/...'
+        snapshot_path = f"uploads/tenants/tenant_{request.tenant_id}/poi_faces/{Path(abs_path).name}"
+
     return FaceEmbeddingResult(
         embedding=embedding.tolist(),
         face_bbox=None,
-        snapshot_path=None,
+        snapshot_path=snapshot_path,
     )
 
 

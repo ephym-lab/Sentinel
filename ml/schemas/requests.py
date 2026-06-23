@@ -65,6 +65,8 @@ class FaceRecognizeRequest(BaseModel):
     """Input for /recognize — extract embedding from a face crop."""
 
     face_b64: str = Field(..., description="Base64-encoded face crop (aligned 112x112 preferred)")
+    tenant_id: Optional[uuid.UUID] = Field(None, description="Tenant ID to save the snapshot")
+    poi_id: Optional[str] = Field(None, description="POI ID for the snapshot prefix")
 
 
 class FaceEnrollRequest(BaseModel):
@@ -94,6 +96,8 @@ class ReIDExtractRequest(BaseModel):
     """Input for /extract-reid — extract body appearance embedding."""
 
     person_crop_b64: str = Field(..., description="Base64-encoded person crop from detector")
+    tenant_id: Optional[uuid.UUID] = Field(None, description="Tenant ID to save the snapshot")
+    poi_id: Optional[str] = Field(None, description="POI ID for the snapshot prefix")
 
 
 class PersonDetectRequest(BaseModel):

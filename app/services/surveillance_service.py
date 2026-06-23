@@ -41,6 +41,7 @@ async def find_poi_match(
     db: AsyncSession,
     embedding: list[float],
     field: str,  # "face_embedding" or "reid_embedding"
+    camera_id: str,
     threshold: float = 0.70
 ) -> tuple[Optional[POI], float]:
     """Find the best matching Person of Interest for an embedding using async SQLAlchemy 2.0."""
@@ -58,6 +59,10 @@ async def find_poi_match(
         for poi in all_pois:
             poi_emb = getattr(poi, field)
             if poi_emb is not None:
+                # Check target_cameras restriction
+                if poi.target_cameras and camera_id not in poi.target_cameras:
+                    continue
+                    
                 sim = cosine_similarity(query_emb, list(poi_emb))
                 if sim > best_score:
                     best_score = sim
@@ -66,22 +71,28 @@ async def find_poi_match(
         if best_score >= threshold:
             return best_poi, best_score
         return None, 0.0
-    else:
         poi_column = getattr(POI, field)
         stmt = (
             select(POI, poi_column.cosine_distance(query_emb).label("distance"))
             .where(poi_column.is_not(None))
-            .order_by(text("distance ASC"))
-            .limit(1)
         )
         result = await db.execute(stmt)
-        row = result.first()
+        rows = result.all()
         
-        if row:
-            poi, distance = row
-            similarity = 1.0 - distance
+        best_poi = None
+        best_distance = 2.0
+        
+        for p, dist in rows:
+            if p.target_cameras and camera_id not in p.target_cameras:
+                continue
+            if dist < best_distance:
+                best_distance = dist
+                best_poi = p
+        
+        if best_poi:
+            similarity = 1.0 - best_distance
             if similarity >= threshold:
-                return poi, similarity
+                return best_poi, similarity
                 
         return None, 0.0
 
@@ -266,7 +277,7 @@ async def process_camera_frame(
     poi_matches = []
     for face_emb in ml_result.get("face_embeddings", []):
         embedding = face_emb["embedding"]
-        poi, score = await find_poi_match(db, embedding, "face_embedding", threshold=0.75)
+        poi, score = await find_poi_match(db, embedding, "face_embedding", camera_id, threshold=0.75)
         if poi:
             poi_matches.append({
                 "poi_id": poi.id,
@@ -278,7 +289,7 @@ async def process_camera_frame(
 
     for reid_emb in ml_result.get("reid_embeddings", []):
         embedding = reid_emb["embedding"]
-        poi, score = await find_poi_match(db, embedding, "reid_embedding", threshold=0.65)
+        poi, score = await find_poi_match(db, embedding, "reid_embedding", camera_id, threshold=0.65)
         if poi:
             poi_matches.append({
                 "poi_id": poi.id,
