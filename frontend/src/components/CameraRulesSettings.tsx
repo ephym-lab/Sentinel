@@ -5,7 +5,7 @@ import api from "src/lib/api";
 interface CameraRule {
   id: string;
   name: string | null;
-  behavior: string;
+  behavior: string[];
   action: string | null;
   start_time: string | null;
   end_time: string | null;
@@ -80,7 +80,7 @@ export default function CameraRulesSettings() {
     try {
       const newRule = { 
         name: "New Security Rule",
-        behavior: "", 
+        behavior: [], 
         action: AVAILABLE_ACTIONS[0],
         is_active: true 
       };
@@ -110,14 +110,14 @@ export default function CameraRulesSettings() {
   };
 
   const toggleBehavior = (rule: CameraRule, behaviorToToggle: string) => {
-    const currentBehaviors = rule.behavior ? rule.behavior.split(",").map(b => b.trim()).filter(Boolean) : [];
+    const currentBehaviors = rule.behavior || [];
     let newBehaviors;
     if (currentBehaviors.includes(behaviorToToggle)) {
-      newBehaviors = currentBehaviors.filter(b => b !== behaviorToToggle);
+      newBehaviors = currentBehaviors.filter((b: string) => b !== behaviorToToggle);
     } else {
       newBehaviors = [...currentBehaviors, behaviorToToggle];
     }
-    updateRule(rule.id, { behavior: newBehaviors.join(",") });
+    updateRule(rule.id, { behavior: newBehaviors });
   };
 
   return (
@@ -182,7 +182,7 @@ export default function CameraRulesSettings() {
             </div>
           ) : (
             rules.map((rule, idx) => {
-              const activeBehaviors = rule.behavior ? rule.behavior.split(",").map(b => b.trim()).filter(Boolean) : [];
+              const activeBehaviors = rule.behavior || [];
               
               return (
                 <div 

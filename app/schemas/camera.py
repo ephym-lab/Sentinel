@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime, time
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Optional, Any
+from pydantic import BaseModel, Field, field_validator
 
 
 class CameraFeedRead(BaseModel):
@@ -36,7 +36,7 @@ class CameraCreate(BaseModel):
 
 class CameraRuleBase(BaseModel):
     name: Optional[str] = Field(None, description="Rule name")
-    behavior: str = Field(..., description="Comma-separated behaviors, e.g. suspicious_proximity,fighting")
+    behavior: list[str] = Field(..., description="List of behaviors")
     action: Optional[str] = Field(None, description="Trigger action")
     start_time: Optional[time] = Field(None, description="Active start time (HH:MM:SS)")
     end_time: Optional[time] = Field(None, description="Active end time (HH:MM:SS)")
@@ -49,7 +49,7 @@ class CameraRuleCreate(CameraRuleBase):
 
 class CameraRuleUpdate(BaseModel):
     name: Optional[str] = None
-    behavior: Optional[str] = None
+    behavior: Optional[list[str]] = None
     action: Optional[str] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
@@ -61,6 +61,15 @@ class CameraRuleRead(CameraRuleBase):
     camera_id: UUID
     created_at: datetime
     updated_at: datetime
+    
+    @field_validator('behavior', mode='before')
+    @classmethod
+    def split_behavior(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [b.strip() for b in v.split(",") if b.strip() and b.strip() != "none"]
+        if isinstance(v, list):
+            return [b for b in v if b != "none"]
+        return []
     
     model_config = {"from_attributes": True}
 

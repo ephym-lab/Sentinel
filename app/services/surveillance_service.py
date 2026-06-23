@@ -183,10 +183,10 @@ async def process_camera_frame(
                 for b in rule.behavior.split(","):
                     active_behaviors.add(b.strip())
                     
-        # Join into a comma-separated string, or pass 'none' if empty to disable all behaviors
-        computed_mode = ",".join(active_behaviors) if active_behaviors else "none"
+        # Convert to list for the JSON payload
+        computed_mode = list(active_behaviors) if active_behaviors else ["none"]
     else:
-        computed_mode = tenant.mode
+        computed_mode = [tenant.mode]
 
     # 2. Call ML Service
     ml_result = await ml_client.process_frame(

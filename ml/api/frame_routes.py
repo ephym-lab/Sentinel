@@ -31,7 +31,7 @@ class PipelineResult(BaseModel):
 
     camera_id: uuid.UUID
     timestamp: str
-    mode: str
+    mode: list[str]
     analysis_mode: str = "full"
     inference_time_ms: float
 
@@ -117,7 +117,7 @@ async def process_frame(
         result = await pipeline.process(
             frame=frame,
             camera_id=str(request.camera_id),
-            mode=request.mode.value,
+            mode=request.mode,
             tenant_id=str(request.tenant_id),
             audio_data=audio_data,
             timestamp=request.timestamp,

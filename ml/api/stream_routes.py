@@ -10,9 +10,13 @@ from ml.config import settings
 
 logger = logging.getLogger(__name__)
 
+import datetime
+import httpx
+from fastapi import APIRouter, Request, Query
+
 router = APIRouter()
 
-async def video_stream_generator(request: Request, camera_id: str, file_path: str, mode: str, tenant_id: str, analysis_mode: str = "full"):
+async def video_stream_generator(request: Request, camera_id: str, file_path: str, mode: list[str], tenant_id: str, analysis_mode: str = "full"):
     """
     Reads video frames from disk, runs ML inference asynchronously, 
     annotates bounding boxes, and yields JPEG bytes for an MJPEG stream.
@@ -45,7 +49,53 @@ async def video_stream_generator(request: Request, camera_id: str, file_path: st
 
         frame_count = 0
         process_every_n_frames = 3  # Run inference every 3 frames to boost stream FPS
-        cached_result = {}
+        current_mode = list(mode)
+        cached_result = None
+
+        async def poll_active_rules():
+            nonlocal current_mode
+            try:
+                # Poll backend for camera rules
+                backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+                async with httpx.AsyncClient() as client:
+                    res = await client.get(
+                        f"{backend_url}/api/v1/cameras/{camera_id}/rules",
+                        headers={"X-Tenant-ID": tenant_id},
+                        timeout=2.0
+                    )
+                    if res.status_code == 200:
+                        rules = res.json()
+                        if len(rules) > 0:
+                            now = datetime.datetime.now().time()
+                            active_behaviors = set()
+                            for r in rules:
+                                if not r.get("is_active"): continue
+                                
+                                # Time bounds check
+                                st_str = r.get("start_time")
+                                et_str = r.get("end_time")
+                                if st_str and et_str:
+                                    st = datetime.datetime.strptime(st_str, "%H:%M:%S").time()
+                                    et = datetime.datetime.strptime(et_str, "%H:%M:%S").time()
+                                    if st <= et:
+                                        if not (st <= now <= et): continue
+                                    else:
+                                        if not (now >= st or now <= et): continue
+                                
+                                beh = r.get("behavior")
+                                if beh:
+                                    if isinstance(beh, list):
+                                        for b in beh:
+                                            active_behaviors.add(str(b).strip())
+                                    elif isinstance(beh, str):
+                                        for b in beh.split(","):
+                                            active_behaviors.add(b.strip())
+                            
+                            current_mode = list(active_behaviors) if active_behaviors else ["none"]
+                        else:
+                            current_mode = list(mode) # fallback
+            except Exception as e:
+                pass # fail silently to avoid crashing stream
 
         while cap.isOpened():
             if getattr(request.app.state, "is_shutting_down", False):
@@ -55,12 +105,17 @@ async def video_stream_generator(request: Request, camera_id: str, file_path: st
                 logger.info(f"Client disconnected from stream for camera: {camera_id}")
                 break
 
+            # Poll rules every 5 seconds (roughly)
+            if frame_count % (int(fps) * 5) == 0:
+                asyncio.create_task(poll_active_rules())
+
             start_t = time.perf_counter()
             ret, frame = cap.read()
             
             if not ret:
                 # Loop the video continuously to simulate 24/7 camera
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                await asyncio.sleep(0.1)
                 continue
                 
             frame_count += 1
@@ -70,9 +125,9 @@ async def video_stream_generator(request: Request, camera_id: str, file_path: st
                     # NOTICE: Removed run_in_executor call here because your pipeline.process 
                     # method internalizes its own concurrent thread pool now!
                     cached_result = await pipeline.process(
-                        frame=frame.copy(),  # Copy preserves contiguous memory layout
+                        frame=frame.copy(),
                         camera_id=camera_id,
-                        mode=mode,
+                        mode=current_mode,
                         tenant_id=tenant_id,
                         audio_data=None,
                         analysis_mode=analysis_mode,
@@ -112,7 +167,7 @@ async def video_stream_generator(request: Request, camera_id: str, file_path: st
         logger.info(f"Video capture resources released for camera: {camera_id}")
 
 @router.get("")
-async def stream_video(request: Request, camera_id: str, file_path: str, mode: str, tenant_id: str, analysis_mode: str = "full"):
+async def stream_video(request: Request, camera_id: str, file_path: str, tenant_id: str, mode: list[str] = Query(default=["none"]), analysis_mode: str = "full"):
     """
     MJPEG stream endpoint that feeds processed frames from ML to frontend.
     """

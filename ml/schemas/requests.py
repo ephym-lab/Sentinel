@@ -46,7 +46,7 @@ class FrameInput(BaseModel):
 
     image_b64: str = Field(..., description="Base64-encoded camera frame (JPEG or PNG)")
     camera_id: uuid.UUID = Field(..., description="Camera identifier for location tracking")
-    mode: DeploymentMode = Field(..., description="Deployment mode determines which detections run")
+    mode: list[str] = Field(..., description="List of active behaviors or deployment mode")
     tenant_id: uuid.UUID = Field(..., description="Tenant identifier for multi-tenancy DB lookups")
     timestamp: str | None = Field(None, description="ISO 8601 timestamp of frame capture")
     include_audio: bool = Field(False, description="Whether audio data is included for fusion")

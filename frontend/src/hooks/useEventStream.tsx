@@ -47,7 +47,12 @@ export function EventStreamProvider({ children }: { children: ReactNode }) {
       // Check if API_BASE_URL is relative or absolute
       let wsHost = "localhost:8000";
       if (API_BASE_URL.startsWith("http")) {
-        wsHost = API_BASE_URL.replace(/^https?:\/\//, "");
+        try {
+          const urlObj = new URL(API_BASE_URL);
+          wsHost = urlObj.host;
+        } catch (e) {
+          wsHost = API_BASE_URL.replace(/^https?:\/\//, "").split('/')[0];
+        }
       } else if (typeof window !== "undefined") {
         wsHost = window.location.host;
       }

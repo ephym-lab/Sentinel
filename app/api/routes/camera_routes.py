@@ -366,7 +366,7 @@ async def create_camera_rule(
         tenant_id=x_tenant_id,
         name=data.name,
         action=data.action,
-        behavior=data.behavior,
+        behavior=",".join(data.behavior) if data.behavior else "none",
         start_time=data.start_time,
         end_time=data.end_time,
         is_active=data.is_active
@@ -411,7 +411,7 @@ async def update_camera_rule(
     if data.name is not None:
         rule.name = data.name
     if data.behavior is not None:
-        rule.behavior = data.behavior
+        rule.behavior = ",".join(data.behavior) if data.behavior else "none"
     if data.action is not None:
         rule.action = data.action
     if data.start_time is not None:
