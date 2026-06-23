@@ -46,7 +46,7 @@ class FrameInput(BaseModel):
 
     image_b64: str = Field(..., description="Base64-encoded camera frame (JPEG or PNG)")
     camera_id: uuid.UUID = Field(..., description="Camera identifier for location tracking")
-    mode: DeploymentMode = Field(..., description="Deployment mode determines which detections run")
+    mode: list[str] = Field(..., description="List of active behaviors or deployment mode")
     tenant_id: uuid.UUID = Field(..., description="Tenant identifier for multi-tenancy DB lookups")
     timestamp: str | None = Field(None, description="ISO 8601 timestamp of frame capture")
     include_audio: bool = Field(False, description="Whether audio data is included for fusion")
@@ -65,6 +65,8 @@ class FaceRecognizeRequest(BaseModel):
     """Input for /recognize — extract embedding from a face crop."""
 
     face_b64: str = Field(..., description="Base64-encoded face crop (aligned 112x112 preferred)")
+    tenant_id: Optional[uuid.UUID] = Field(None, description="Tenant ID to save the snapshot")
+    poi_id: Optional[str] = Field(None, description="POI ID for the snapshot prefix")
 
 
 class FaceEnrollRequest(BaseModel):
@@ -72,6 +74,7 @@ class FaceEnrollRequest(BaseModel):
 
     image_b64: str = Field(..., description="Base64-encoded photo containing exactly one face")
     person_id: uuid.UUID = Field(..., description="Person UUID for linking the embedding")
+    tenant_id: Optional[uuid.UUID] = Field(None, description="Optional tenant ID to save the snapshot")
 
 
 class AudioClassifyRequest(BaseModel):
@@ -94,6 +97,8 @@ class ReIDExtractRequest(BaseModel):
     """Input for /extract-reid — extract body appearance embedding."""
 
     person_crop_b64: str = Field(..., description="Base64-encoded person crop from detector")
+    tenant_id: Optional[uuid.UUID] = Field(None, description="Tenant ID to save the snapshot")
+    poi_id: Optional[str] = Field(None, description="POI ID for the snapshot prefix")
 
 
 class PersonDetectRequest(BaseModel):

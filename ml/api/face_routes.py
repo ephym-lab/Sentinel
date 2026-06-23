@@ -93,10 +93,18 @@ async def recognize_face(
             "Ensure the image contains a clearly visible face.",
         )
 
+    snapshot_path = None
+    if request.tenant_id and request.poi_id:
+        from ml.utils.file_utils import save_snapshot
+        from pathlib import Path
+        abs_path = save_snapshot(face_crop, category="poi_faces", prefix=request.poi_id, tenant_id=str(request.tenant_id))
+        # Backend expects paths like 'uploads/tenants/...'
+        snapshot_path = f"uploads/tenants/tenant_{request.tenant_id}/poi_faces/{Path(abs_path).name}"
+
     return FaceEmbeddingResult(
         embedding=embedding.tolist(),
         face_bbox=None,
-        snapshot_path=None,
+        snapshot_path=snapshot_path,
     )
 
 
@@ -135,15 +143,20 @@ async def enroll_face(
     # Use the largest face (most likely the subject)
     best = max(results, key=lambda r: (r["bbox"][2] - r["bbox"][0]) * (r["bbox"][3] - r["bbox"][1]))
 
-    # Save face snapshot for records (under the tenant's images/ directory)
+    # Save face snapshot for records (under the tenant's images/ directory) if tenant_id provided
     x1, y1, x2, y2 = best["bbox"]
     face_crop = frame[max(0, y1):y2, max(0, x1):x2]
-    snapshot_path = save_snapshot(
-        face_crop,
-        category="images",
-        prefix=request.person_id,
-        tenant_id=getattr(request, "tenant_id", None),
-    )
+    
+    snapshot_path = None
+    if getattr(request, "tenant_id", None):
+        abs_path = save_snapshot(
+            face_crop,
+            category="images",
+            prefix=str(request.person_id),
+            tenant_id=str(request.tenant_id),
+        )
+        from pathlib import Path
+        snapshot_path = f"uploads/tenants/tenant_{request.tenant_id}/images/{Path(abs_path).name}"
 
     bbox = FaceBBox(
         x1=x1, y1=y1, x2=x2, y2=y2,

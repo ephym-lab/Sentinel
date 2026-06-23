@@ -11,20 +11,27 @@ import { useAuthStore } from "src/store/authStore";
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const token = useAuthStore((state) => state.token);
-  const [isReady, setIsReady] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    // Wait for Zustand to hydrate the persisted state from localStorage
+    const unsub = useAuthStore.persist.onFinishHydration(() => setIsHydrated(true));
+    setIsHydrated(useAuthStore.persist.hasHydrated());
+    return () => {
+      unsub();
+    };
+  }, []);
 
   // Pages that don't require authentication
   const isPublicPage = ["/", "/login", "/register", "/onboarding"].includes(router.pathname);
 
   useEffect(() => {
-    // Wait for hydration
-    setIsReady(true);
-    if (!token && !isPublicPage) {
+    if (isHydrated && !token && !isPublicPage) {
       router.replace("/login");
     }
-  }, [token, router.pathname]);
+  }, [token, router.pathname, isHydrated]);
 
-  if (!isReady) return null;
+  if (!isHydrated) return null; // Avoid flashing unauthenticated state
   if (!token && !isPublicPage) return null;
 
   return <>{children}</>;

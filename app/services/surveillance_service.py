@@ -14,6 +14,7 @@ from app.models.poi_sighting import POISighting
 from app.models.detection_event import DetectionEvent
 from app.models.incident import Incident
 from app.models.person import Person
+from app.models.camera_rule import CameraRule
 from app.models.guardian import Guardian
 from app.models.journey_event import JourneyEvent
 from app.services.ml_client import ml_client
@@ -40,6 +41,7 @@ async def find_poi_match(
     db: AsyncSession,
     embedding: list[float],
     field: str,  # "face_embedding" or "reid_embedding"
+    camera_id: str,
     threshold: float = 0.70
 ) -> tuple[Optional[POI], float]:
     """Find the best matching Person of Interest for an embedding using async SQLAlchemy 2.0."""
@@ -57,6 +59,10 @@ async def find_poi_match(
         for poi in all_pois:
             poi_emb = getattr(poi, field)
             if poi_emb is not None:
+                # Check target_cameras restriction
+                if poi.target_cameras and camera_id not in poi.target_cameras:
+                    continue
+                    
                 sim = cosine_similarity(query_emb, list(poi_emb))
                 if sim > best_score:
                     best_score = sim
@@ -65,22 +71,28 @@ async def find_poi_match(
         if best_score >= threshold:
             return best_poi, best_score
         return None, 0.0
-    else:
         poi_column = getattr(POI, field)
         stmt = (
             select(POI, poi_column.cosine_distance(query_emb).label("distance"))
             .where(poi_column.is_not(None))
-            .order_by(text("distance ASC"))
-            .limit(1)
         )
         result = await db.execute(stmt)
-        row = result.first()
+        rows = result.all()
         
-        if row:
-            poi, distance = row
-            similarity = 1.0 - distance
+        best_poi = None
+        best_distance = 2.0
+        
+        for p, dist in rows:
+            if p.target_cameras and camera_id not in p.target_cameras:
+                continue
+            if dist < best_distance:
+                best_distance = dist
+                best_poi = p
+        
+        if best_poi:
+            similarity = 1.0 - best_distance
             if similarity >= threshold:
-                return poi, similarity
+                return best_poi, similarity
                 
         return None, 0.0
 
@@ -155,11 +167,43 @@ async def process_camera_frame(
     if not tenant:
         raise ValueError(f"Tenant '{tenant_id}' not found.")
 
+    # 1.5 Evaluate dynamic rules for this camera
+    stmt_all = select(CameraRule).where(CameraRule.camera_id == camera_uuid)
+    all_rules = (await db.execute(stmt_all)).scalars().all()
+    
+    # If the user has created at least one rule (active or inactive), we enforce strict rule-engine logic.
+    # Otherwise, fallback to the legacy environment mode.
+    if len(all_rules) > 0:
+        now = datetime.datetime.now().time()
+        active_behaviors = set()
+        
+        for rule in all_rules:
+            if not rule.is_active:
+                continue
+                
+            # Time bounds check
+            if rule.start_time and rule.end_time:
+                if rule.start_time <= rule.end_time:
+                    if not (rule.start_time <= now <= rule.end_time):
+                        continue
+                else: # Overnight rule (e.g. 22:00 to 06:00)
+                    if not (now >= rule.start_time or now <= rule.end_time):
+                        continue
+                        
+            if rule.behavior:
+                for b in rule.behavior.split(","):
+                    active_behaviors.add(b.strip())
+                    
+        # Convert to list for the JSON payload
+        computed_mode = list(active_behaviors) if active_behaviors else ["none"]
+    else:
+        computed_mode = [tenant.mode]
+
     # 2. Call ML Service
     ml_result = await ml_client.process_frame(
         image_b64=image_b64,
         camera_id=camera_id,
-        mode=tenant.mode,
+        mode=computed_mode,
         tenant_id=tenant_id,
         audio_b64=audio_b64,
         analysis_mode=analysis_mode,
@@ -233,7 +277,7 @@ async def process_camera_frame(
     poi_matches = []
     for face_emb in ml_result.get("face_embeddings", []):
         embedding = face_emb["embedding"]
-        poi, score = await find_poi_match(db, embedding, "face_embedding", threshold=0.75)
+        poi, score = await find_poi_match(db, embedding, "face_embedding", camera_id, threshold=0.75)
         if poi:
             poi_matches.append({
                 "poi_id": poi.id,
@@ -245,7 +289,7 @@ async def process_camera_frame(
 
     for reid_emb in ml_result.get("reid_embeddings", []):
         embedding = reid_emb["embedding"]
-        poi, score = await find_poi_match(db, embedding, "reid_embedding", threshold=0.65)
+        poi, score = await find_poi_match(db, embedding, "reid_embedding", camera_id, threshold=0.65)
         if poi:
             poi_matches.append({
                 "poi_id": poi.id,

@@ -11,9 +11,10 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_tenant_db
-from app.schemas.camera import CameraCreate, CameraRead
+from app.schemas.camera import CameraCreate, CameraRead, CameraRuleCreate, CameraRuleRead, CameraRuleUpdate
 from app.models.camera import Camera
 from app.models.camera_feed import CameraFeed
+from app.models.camera_rule import CameraRule
 from app.models.tenant import Tenant
 from app.core.config import settings
 
@@ -76,8 +77,8 @@ async def register_camera(
     db.add(camera)
     await db.commit()
     
-    # Reload with feeds loaded to avoid async relationship loading issues
-    stmt = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == camera_uuid)
+    # Reload with feeds and rules loaded to avoid async relationship loading issues
+    stmt = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.id == camera_uuid)
     res = await db.execute(stmt)
     camera = res.scalar_one()
     return camera
@@ -93,7 +94,7 @@ async def upload_camera_feed(
 ):
     """Upload a video file to act as the feed source for a camera."""
     # 1. Verify camera exists
-    stmt_cam = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    stmt_cam = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.id == id)
     res_cam = await db.execute(stmt_cam)
     camera = res_cam.scalar_one_or_none()
     if not camera:
@@ -170,7 +171,7 @@ async def upload_camera_feed(
     await db.commit()
 
     # 9. Reload camera and return it
-    stmt_cam_reload = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    stmt_cam_reload = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.id == id)
     res_cam_reload = await db.execute(stmt_cam_reload)
     camera_reloaded = res_cam_reload.scalar_one()
     await db.refresh(camera_reloaded)
@@ -184,7 +185,7 @@ async def list_cameras(
     db: AsyncSession = Depends(get_tenant_db)
 ):
     """List all registered cameras for the tenant with active feed details."""
-    stmt = select(Camera).options(selectinload(Camera.feeds)).where(Camera.tenant_id == x_tenant_id)
+    stmt = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.tenant_id == x_tenant_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -196,7 +197,7 @@ async def get_camera(
     db: AsyncSession = Depends(get_tenant_db)
 ):
     """Retrieve camera details and feed history."""
-    stmt = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id, Camera.tenant_id == x_tenant_id)
+    stmt = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.id == id, Camera.tenant_id == x_tenant_id)
     result = await db.execute(stmt)
     camera = result.scalar_one_or_none()
     if not camera:
@@ -238,7 +239,7 @@ async def update_camera(
     await db.commit()
     
     # Reload camera
-    stmt_reload = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    stmt_reload = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.id == id)
     res_reload = await db.execute(stmt_reload)
     return res_reload.scalar_one()
 
@@ -250,7 +251,7 @@ async def activate_camera_feed(
     db: AsyncSession = Depends(get_tenant_db)
 ):
     """Activate a specific camera feed and deactivate all others."""
-    stmt_cam = select(Camera).options(selectinload(Camera.feeds)).where(Camera.id == id)
+    stmt_cam = select(Camera).options(selectinload(Camera.feeds), selectinload(Camera.rules)).where(Camera.id == id)
     res_cam = await db.execute(stmt_cam)
     camera = res_cam.scalar_one_or_none()
     if not camera:
@@ -343,4 +344,107 @@ async def delete_camera(
     await db.delete(camera)
     await db.commit()
     return {"status": "success", "detail": f"Camera '{id}' and all associated feeds have been deleted."}
+
+
+@router.post("/{id}/rules", response_model=CameraRuleRead, status_code=status.HTTP_201_CREATED)
+async def create_camera_rule(
+    id: uuid.UUID,
+    data: CameraRuleCreate,
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """Create a new rule for a specific camera."""
+    stmt = select(Camera).where(Camera.id == id, Camera.tenant_id == x_tenant_id)
+    res = await db.execute(stmt)
+    camera = res.scalar_one_or_none()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found.")
+
+    rule = CameraRule(
+        id=data.id or uuid.uuid4(),
+        camera_id=id,
+        tenant_id=x_tenant_id,
+        name=data.name,
+        action=data.action,
+        behavior=",".join(data.behavior) if data.behavior else "none",
+        start_time=data.start_time,
+        end_time=data.end_time,
+        is_active=data.is_active
+    )
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.get("/{id}/rules", response_model=list[CameraRuleRead])
+async def list_camera_rules(
+    id: uuid.UUID,
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """List all rules for a specific camera."""
+    stmt = select(CameraRule).where(CameraRule.camera_id == id, CameraRule.tenant_id == x_tenant_id)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+@router.patch("/{id}/rules/{rule_id}", response_model=CameraRuleRead)
+async def update_camera_rule(
+    id: uuid.UUID,
+    rule_id: uuid.UUID,
+    data: CameraRuleUpdate,
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """Update a specific camera rule."""
+    stmt = select(CameraRule).where(
+        CameraRule.id == rule_id, 
+        CameraRule.camera_id == id, 
+        CameraRule.tenant_id == x_tenant_id
+    )
+    result = await db.execute(stmt)
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Camera Rule not found.")
+
+    if data.name is not None:
+        rule.name = data.name
+    if data.behavior is not None:
+        rule.behavior = ",".join(data.behavior) if data.behavior else "none"
+    if data.action is not None:
+        rule.action = data.action
+    if data.start_time is not None:
+        rule.start_time = data.start_time
+    if data.end_time is not None:
+        rule.end_time = data.end_time
+    if data.is_active is not None:
+        rule.is_active = data.is_active
+
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.delete("/{id}/rules/{rule_id}", status_code=status.HTTP_200_OK)
+async def delete_camera_rule(
+    id: uuid.UUID,
+    rule_id: uuid.UUID,
+    x_tenant_id: uuid.UUID = Header(..., alias="X-Tenant-ID"),
+    db: AsyncSession = Depends(get_tenant_db)
+):
+    """Delete a specific camera rule."""
+    stmt = select(CameraRule).where(
+        CameraRule.id == rule_id, 
+        CameraRule.camera_id == id, 
+        CameraRule.tenant_id == x_tenant_id
+    )
+    result = await db.execute(stmt)
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Camera Rule not found.")
+
+    await db.delete(rule)
+    await db.commit()
+    return {"status": "success", "detail": "Camera Rule deleted."}
 

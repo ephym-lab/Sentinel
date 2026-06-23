@@ -447,13 +447,12 @@ class BehaviorClassifier:
     def analyze(
         self,
         persons: list[dict],
+        active_behaviors: list[str],
         frame_shape: tuple = (480, 640, 3),
-        mode: str = "school",
         timestamp: Optional[float] = None,
     ) -> list[dict]:
         """
-        Analyze behaviors for all persons in a frame with clean situational
-        exclusion.
+        Analyze behaviors for all persons in a frame based on active user-configurable rules.
 
         `timestamp` should be the capture time of this frame in seconds
         (e.g. time.monotonic() or the frame's PTS converted to seconds).
@@ -484,49 +483,46 @@ class BehaviorClassifier:
         evaluated_pairs_this_frame: set = set()
         fight_result_by_pair: dict = {}
 
-        for person in persons:
-            track_id = person.get("track_id", -1)
-            for other in persons:
-                if other is person:
-                    continue
-                pair_key = frozenset({track_id, other.get("track_id", -1)})
-                if pair_key in evaluated_pairs_this_frame:
-                    continue
-                evaluated_pairs_this_frame.add(pair_key)
-                fight = self._detect_fighting_pair(person, other, now)
-                if fight is not None:
-                    fight_result_by_pair[pair_key] = fight
+        if "fighting" in active_behaviors:
+            for person in persons:
+                track_id = person.get("track_id", -1)
+                for other in persons:
+                    if other is person:
+                        continue
+                    pair_key = frozenset({track_id, other.get("track_id", -1)})
+                    if pair_key in evaluated_pairs_this_frame:
+                        continue
+                    evaluated_pairs_this_frame.add(pair_key)
+                    fight = self._detect_fighting_pair(person, other, now)
+                    if fight is not None:
+                        fight_result_by_pair[pair_key] = fight
 
         # --- Per-person detections ---
         for person in persons:
             track_id = person.get("track_id", -1)
             detected = None
 
-            # Priority 1: Fighting (CRITICAL threat — evaluated in ALL settings)
-            # fight_result_by_pair was already computed once per unordered
-            # pair above, so every person in a flagged pair should pick up
-            # that same result — there's no double-counting risk here since
-            # we're only reading the lookup table, not advancing any streak.
-            for other in persons:
-                if other is person:
-                    continue
-                pair_key = frozenset({track_id, other.get("track_id", -1)})
-                fight = fight_result_by_pair.get(pair_key)
-                if fight is not None:
-                    detected = fight
-                    break
+            # Priority 1: Fighting (CRITICAL threat)
+            if "fighting" in active_behaviors:
+                for other in persons:
+                    if other is person:
+                        continue
+                    pair_key = frozenset({track_id, other.get("track_id", -1)})
+                    fight = fight_result_by_pair.get(pair_key)
+                    if fight is not None:
+                        detected = fight
+                        break
 
             # Priority 2: Medical emergency (HIGH priority)
-            if detected is None:
+            if detected is None and "person_down" in active_behaviors:
                 detected = _detect_person_down(person)
 
             # Priority 3: Retail Loss Prevention Gestures
-            if detected is None and mode == "supermarket":
+            if detected is None and "concealment_gesture" in active_behaviors:
                 detected = _detect_concealment_gesture(person)
 
-            # Priority 4: Low/Medium context loitering profiles
-            # CONTEXT CORRECTION: Skip entirely in supermarkets to avoid checkout/aisle queues false flags!
-            if detected is None and mode in ("school", "mall"):
+            # Priority 4: Suspicious Proximity
+            if detected is None and "suspicious_proximity" in active_behaviors:
                 detected = _detect_suspicious_proximity(person, persons)
 
             if detected and detected["confidence"] >= self.confidence_threshold:
@@ -538,19 +534,20 @@ class BehaviorClassifier:
                 })
 
         # --- Frame-level detections (multi-person) ---
-        crowd = _detect_crowd_panic(persons, frame_shape)
-        if crowd and crowd["confidence"] >= self.confidence_threshold:
-            results.append({
-                "track_id": -1,
-                "behavior": crowd["behavior"],
-                "confidence": crowd["confidence"],
-                "severity": SEVERITY_MAP.get(crowd["behavior"], "low"),
-            })
+        if "crowd_panic" in active_behaviors:
+            crowd = _detect_crowd_panic(persons, frame_shape)
+            if crowd and crowd["confidence"] >= self.confidence_threshold:
+                results.append({
+                    "track_id": -1,
+                    "behavior": crowd["behavior"],
+                    "confidence": crowd["confidence"],
+                    "severity": SEVERITY_MAP.get(crowd["behavior"], "low"),
+                })
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.debug(
             f"Behavior analysis: {len(results)} events from {len(persons)} "
-            f"persons in {elapsed_ms:.2f}ms (mode={mode})"
+            f"persons in {elapsed_ms:.2f}ms (active_behaviors={len(active_behaviors)})"
         )
 
         return results

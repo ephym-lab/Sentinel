@@ -510,7 +510,7 @@ export default function MonitorPage() {
                     ) : (
                       <img
                         ref={streamImgRef}
-                        src={`${API_BASE_URL.replace("8000", "8001")}/stream?camera_id=${selectedCamera.id}&file_path=${encodeURIComponent(selectedCamera.active_feed.file_path)}&mode=${tenant.mode}&tenant_id=${tenant.id}&analysis_mode=${analysisMode}`}
+                        src={`http://localhost:8001/stream?camera_id=${selectedCamera.id}&file_path=${encodeURIComponent(selectedCamera.active_feed.file_path)}&mode=${tenant.mode}&tenant_id=${tenant.id}&analysis_mode=${analysisMode}`}
                         crossOrigin="anonymous"
                         draggable={false}
                         className="w-full h-full object-contain pointer-events-none"
@@ -520,7 +520,7 @@ export default function MonitorPage() {
                   ) : (
                     <video
                       ref={videoRef}
-                      src={`${API_BASE_URL}/static/${selectedCamera.active_feed.file_path}`}
+                      src={`http://localhost:8000/static/${selectedCamera.active_feed.file_path}`}
                       crossOrigin="anonymous"
                       controls
                       autoPlay

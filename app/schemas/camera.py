@@ -1,7 +1,7 @@
 from uuid import UUID
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field
+from datetime import datetime, time
+from typing import Optional, Any
+from pydantic import BaseModel, Field, field_validator
 
 
 class CameraFeedRead(BaseModel):
@@ -34,6 +34,46 @@ class CameraCreate(BaseModel):
     is_active: bool = Field(True, description="Whether the camera is active")
 
 
+class CameraRuleBase(BaseModel):
+    name: Optional[str] = Field(None, description="Rule name")
+    behavior: list[str] = Field(..., description="List of behaviors")
+    action: Optional[str] = Field(None, description="Trigger action")
+    start_time: Optional[time] = Field(None, description="Active start time (HH:MM:SS)")
+    end_time: Optional[time] = Field(None, description="Active end time (HH:MM:SS)")
+    is_active: bool = Field(True, description="Is this rule currently active")
+
+
+class CameraRuleCreate(CameraRuleBase):
+    id: Optional[UUID] = None
+
+
+class CameraRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    behavior: Optional[list[str]] = None
+    action: Optional[str] = None
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+    is_active: Optional[bool] = None
+
+
+class CameraRuleRead(CameraRuleBase):
+    id: UUID
+    camera_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    
+    @field_validator('behavior', mode='before')
+    @classmethod
+    def split_behavior(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [b.strip() for b in v.split(",") if b.strip() and b.strip() != "none"]
+        if isinstance(v, list):
+            return [b for b in v if b != "none"]
+        return []
+    
+    model_config = {"from_attributes": True}
+
+
 class CameraRead(BaseModel):
     id: UUID
     name: str
@@ -43,5 +83,6 @@ class CameraRead(BaseModel):
     updated_at: datetime
     active_feed: Optional[CameraFeedRead] = None
     feeds: Optional[list[CameraFeedRead]] = None
+    rules: Optional[list[CameraRuleRead]] = None
 
     model_config = {"from_attributes": True}

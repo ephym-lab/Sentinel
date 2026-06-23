@@ -36,7 +36,7 @@ export default function IconRail() {
 
   const adminNavItems = [
     { href: "/admin/devices", icon: Camera, label: "Camera Admin" },
-    { href: "/admin/analytics", icon: Settings, label: "Settings & Admin" },
+    { href: "/settings", icon: Settings, label: "Settings" },
   ];
 
   return (
@@ -93,7 +93,7 @@ export default function IconRail() {
           const isActive = currentPath.startsWith(item.href);
 
           // Gating check: only admins/super_admins can access admin sub-links
-          if (item.href.startsWith("/admin") && user?.role !== "admin" && user?.role !== "super_admin") {
+          if ((item.href.startsWith("/admin") || item.href === "/settings") && user?.role !== "admin" && user?.role !== "super_admin") {
             return null;
           }
 

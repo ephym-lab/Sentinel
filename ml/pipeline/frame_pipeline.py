@@ -123,7 +123,8 @@ class FramePipeline:
                     })
 
             # Emotion (supermarket + school modes, or explicitly requested)
-            if emotion_clf and (mode in ("supermarket", "school") or analysis_mode == "emotion"):
+            is_legacy = any(m in mode for m in ("supermarket", "school")) if isinstance(mode, list) else mode in ("supermarket", "school")
+            if emotion_clf and (is_legacy or analysis_mode == "emotion"):
                 emotion = emotion_clf.classify(face_crop)
                 if emotion:
                     result["emotions"].append({
@@ -173,17 +174,45 @@ class FramePipeline:
             return result
 
         # Behavior analysis
-        if behavior_clf and raw_persons and mode in ("school", "mall", "supermarket"):
+        if behavior_clf and raw_persons:
             h, w = frame.shape[:2]
-            behaviors = behavior_clf.analyze(
-                raw_persons,
-                frame_shape=(h, w, 3),
-                mode=mode,
-            )
-            result["behaviors"] = behaviors
+            
+            # Convert legacy mode or dynamic rule engine string to a list of behaviors
+            if isinstance(mode, str):
+                if "," in mode:
+                    active_behaviors = [b.strip() for b in mode.split(",")]
+                elif mode in ("school", "mall", "supermarket"):
+                    active_behaviors = [
+                        "fighting", "crowd_panic", "person_down", "loitering", 
+                        "suspicious_proximity", "perimeter_climbing", "night_gathering",
+                        "concealment_gesture", "item_to_bag", "repeated_aisle_passes", 
+                        "high_value_dwell", "self_checkout_anomaly", "crowd_crush"
+                    ]
+                else:
+                    active_behaviors = []
+            else:
+                if any(m in mode for m in ("school", "mall", "supermarket")):
+                    active_behaviors = [
+                        "fighting", "crowd_panic", "person_down", "loitering", 
+                        "suspicious_proximity", "perimeter_climbing", "night_gathering",
+                        "concealment_gesture", "item_to_bag", "repeated_aisle_passes", 
+                        "high_value_dwell", "self_checkout_anomaly", "crowd_crush"
+                    ]
+                else:
+                    active_behaviors = mode
+                
+                
+            if active_behaviors:
+                behaviors = behavior_clf.analyze(
+                    raw_persons,
+                    active_behaviors=active_behaviors,
+                    frame_shape=(h, w, 3),
+                )
+                result["behaviors"] = behaviors
 
         # Re-ID extraction (mall + supermarket for cross-camera tracking)
-        if reid_extractor and result["tracked_persons"] and mode in ("mall", "supermarket"):
+        is_mall_supermarket = any(m in mode for m in ("mall", "supermarket")) if isinstance(mode, list) else mode in ("mall", "supermarket")
+        if reid_extractor and result["tracked_persons"] and is_mall_supermarket:
             crops = []
             for person in result["tracked_persons"]:
                 x1, y1, x2, y2 = person["bbox"]
@@ -216,13 +245,15 @@ class FramePipeline:
         audio_clf = self._get_model("audio_classifier")
 
         # Fire detection (run for all modes, or if explicitly requested)
-        if fire_detector and (mode in ("school", "mall", "supermarket") or analysis_mode == "fire"):
+        is_legacy = any(m in mode for m in ("school", "mall", "supermarket")) if isinstance(mode, list) else mode in ("school", "mall", "supermarket")
+        if fire_detector and (is_legacy or analysis_mode == "fire"):
             raw_fire = fire_detector.detect(frame)
             result["fire_detections"] = raw_fire
             result["is_fire"] = fire_detector.is_fire_emergency(raw_fire)
 
         # Audio classification (school mode with mic input)
-        if audio_clf and audio_data and mode == "school":
+        is_school = "school" in mode if isinstance(mode, list) else mode == "school"
+        if audio_clf and audio_data and is_school:
             try:
                 audio_events = audio_clf.classify_from_wav_bytes(audio_data)
                 result["audio_events"] = audio_events
@@ -264,7 +295,7 @@ class FramePipeline:
         self,
         frame: np.ndarray,
         camera_id: str,
-        mode: str,
+        mode: list[str] | str,
         tenant_id: str,
         audio_data: Optional[bytes] = None,
         timestamp: Optional[str] = None,

@@ -27,6 +27,7 @@ class ReIDExtractRequest(BaseModel):
     person_crop_b64: str = Field(..., description="Base64-encoded person crop (BGR, full body)")
     track_id: int | None = Field(None, description="ByteTrack ID for logging")
     tenant_id: str | None = Field(None, description="Tenant UUID for scoped file storage")
+    poi_id: str | None = Field(None, description="POI ID for prefixing the snapshot")
     save_snapshot: bool = Field(False, description="Save crop to uploads/tenants/{tenant_id}/images/")
 
 
@@ -76,13 +77,17 @@ async def extract_reid(
 
     snapshot_path = None
     if request.save_snapshot and request.tenant_id:
-        prefix = f"track_{request.track_id}" if request.track_id is not None else "unknown"
-        snapshot_path = save_snapshot(
+        from pathlib import Path
+        prefix = f"poi_{request.poi_id}" if request.poi_id else (f"track_{request.track_id}" if request.track_id is not None else "unknown")
+        category = "poi_bodies" if request.poi_id else "images"
+        
+        abs_path = save_snapshot(
             crop,
-            category="images",
+            category=category,
             prefix=prefix,
             tenant_id=request.tenant_id,
         )
+        snapshot_path = f"uploads/tenants/tenant_{request.tenant_id}/{category}/{Path(abs_path).name}"
 
     return ReIDResult(
         embedding=embedding.tolist(),
