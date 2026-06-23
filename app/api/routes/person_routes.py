@@ -4,7 +4,7 @@ import math
 import random
 from typing import Optional
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from app.core.config import settings
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,6 +123,7 @@ async def create_person(data: PersonCreate, db: AsyncSession = Depends(get_tenan
 @router.post("/{person_id}/face", response_model=PersonRead)
 async def upload_face_photo(
     person_id: str,
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_tenant_db)
 ):
@@ -146,28 +147,35 @@ async def upload_face_photo(
         
     # Read image bytes
     image_bytes = await file.read()
+    import base64
+    import httpx
+    image_b64 = base64.b64encode(image_bytes).decode('utf-8')
     
-    # Save image file to local storage
-    # Directory structure: uploads/tenants/tenant_<tenant_id>/images/
-    # For now we'll put it in shared_enrollments/images or if tenant_id was available it would be there.
-    # But since there is no x_tenant_id passed, we'll keep shared_enrollments but change folder to images.
-    rel_path = file_manager.save_file(
-        tenant_id="shared_enrollments",
-        camera_id="enrollment_station",
-        incident_type="images",
-        file_bytes=image_bytes,
-        extension=file.filename.split(".")[-1] if "." in file.filename else "jpg",
-        prefix=f"person_{person_id}"
-    )
-    
-    # Generate dummy L2-normalized 512-dim embedding for MVP fallback
-    raw_emb = [random.uniform(-1.0, 1.0) for _ in range(512)]
-    norm = math.sqrt(sum(x*x for x in raw_emb))
-    embedding = [x / norm for x in raw_emb]
+    # Hit ML service for face embedding and enrollment photo saving
+    tenant_id_header = request.headers.get("x-tenant-id")
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post("http://localhost:8001/face/enroll-embedding", json={
+                "image_b64": image_b64,
+                "person_id": str(person_uuid),
+                "tenant_id": tenant_id_header
+            }, timeout=30.0)
+            resp.raise_for_status()
+            ml_data = resp.json()
+        except httpx.HTTPStatusError as e:
+            detail = e.response.json().get("detail", str(e))
+            raise HTTPException(status_code=400, detail=f"ML Service error: {detail}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to communicate with ML service: {str(e)}")
+            
+    embedding = ml_data["embedding"]
+    snapshot_path = ml_data.get("snapshot_path")
     
     # Update person
-    person.photo_path = rel_path
     person.face_embedding = embedding
+    if snapshot_path:
+        person.photo_path = snapshot_path
+        
     await db.commit()
     await db.refresh(person)
     
@@ -175,12 +183,30 @@ async def upload_face_photo(
 
 
 @router.post("/identify", response_model=dict)
-async def identify_person_from_face(request: IdentifyRequest, db: AsyncSession = Depends(get_tenant_db)):
+async def identify_person_from_face(req: IdentifyRequest, request: Request, db: AsyncSession = Depends(get_tenant_db)):
     """Identify a person from a face crop embedding comparison."""
-    # Decode image crop and generate dummy embedding for identification fallback
-    raw_emb = [random.uniform(-1.0, 1.0) for _ in range(512)]
-    norm = math.sqrt(sum(x*x for x in raw_emb))
-    query_embedding = [x / norm for x in raw_emb]
+    import httpx
+    tenant_id_header = request.headers.get("x-tenant-id")
+    # Decode image crop and hit ML service to get actual embedding
+    async with httpx.AsyncClient() as client:
+        try:
+            # We use /recognize if it's already a cropped face, 
+            # or /enroll-embedding if it's a full photo. The UI uploads full photo, 
+            # so we use /enroll-embedding with a dummy UUID to trigger face detection.
+            resp = await client.post("http://localhost:8001/face/enroll-embedding", json={
+                "image_b64": req.image_b64,
+                "person_id": str(uuid.uuid4()),
+                "tenant_id": tenant_id_header
+            }, timeout=30.0)
+            resp.raise_for_status()
+            ml_data = resp.json()
+        except httpx.HTTPStatusError as e:
+            detail = e.response.json().get("detail", str(e))
+            raise HTTPException(status_code=400, detail=f"ML Service error: {detail}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to communicate with ML service: {str(e)}")
+            
+    query_embedding = ml_data["embedding"]
     
     # Query database for a face match
     poi_column = Person.face_embedding

@@ -52,6 +52,7 @@ export default function PersonLookupPage() {
   const [searchPhotoUrl, setSearchPhotoUrl] = useState<string | null>(null);
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [matchResult, setMatchResult] = useState<any>(null);
+  const [identifyError, setIdentifyError] = useState<string | null>(null);
 
   // Fetch roster listing
   const { data: roster = [], isLoading, isError, refetch } = useQuery<Person[]>({
@@ -124,15 +125,31 @@ export default function PersonLookupPage() {
     setSearchPhotoUrl(objectUrl);
     setIsIdentifying(true);
     setMatchResult(null);
+    setIdentifyError(null);
 
     try {
-      // Hit /identify with simulated search parameters
+      // Read file as base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip the data:image/jpeg;base64, prefix
+          const base64Data = result.split(',')[1];
+          resolve(base64Data || result);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(file);
+      const base64 = await base64Promise;
+
+      // Hit /identify with actual base64 image data
       const response = await api.post("/persons/identify", {
-        image_b64: "dummy_base64_crop_data",
+        image_b64: base64,
       });
       setMatchResult(response.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Identification failure:", err);
+      setIdentifyError(err.response?.data?.detail || "Failed to identify person from photo.");
     } finally {
       setIsIdentifying(false);
     }
@@ -282,6 +299,7 @@ export default function PersonLookupPage() {
                       setSearchPhoto(null);
                       setSearchPhotoUrl(null);
                       setMatchResult(null);
+                      setIdentifyError(null);
                     }}
                     className="w-full py-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl text-xs font-bold transition-all"
                   >
@@ -303,6 +321,13 @@ export default function PersonLookupPage() {
               <div className="text-center py-6 text-slate-500 text-xs gap-2 flex items-center justify-center">
                 <div className="w-4 h-4 rounded-full border-2 border-slate-800 border-t-rose-500 animate-spin" />
                 Querying pgvector search index...
+              </div>
+            )}
+
+            {identifyError && (
+              <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{identifyError}</span>
               </div>
             )}
 

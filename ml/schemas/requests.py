@@ -74,6 +74,7 @@ class FaceEnrollRequest(BaseModel):
 
     image_b64: str = Field(..., description="Base64-encoded photo containing exactly one face")
     person_id: uuid.UUID = Field(..., description="Person UUID for linking the embedding")
+    tenant_id: Optional[uuid.UUID] = Field(None, description="Optional tenant ID to save the snapshot")
 
 
 class AudioClassifyRequest(BaseModel):
